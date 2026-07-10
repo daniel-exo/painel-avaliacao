@@ -4,143 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Avaliação de Colaboradores</title>
+<link rel="stylesheet" href="styles.css">
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
-<style>
-  :root{
-    --bg:#f3f2f1;
-    --card:#ffffff;
-    --text:#252423;
-    --muted:#605e5c;
-    --accent:#F2C811;
-    --border:#e1dfdd;
-    --green:#2e8b57;
-    --yellow:#c9971d;
-    --red:#c0392b;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0;
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-    background:var(--bg);
-    color:var(--text);
-  }
-  header{
-    background:var(--card);
-    border-bottom:3px solid var(--accent);
-    padding:18px 28px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    flex-wrap:wrap;
-    gap:10px;
-  }
-  header h1{margin:0;font-size:1.3rem;}
-  header .meta{font-size:.8rem;color:var(--muted);}
-  .btn{
-    background:var(--accent);
-    border:none;
-    color:#252423;
-    padding:8px 16px;
-    border-radius:4px;
-    font-weight:600;
-    cursor:pointer;
-    font-size:.85rem;
-  }
-  .btn:hover{opacity:.85;}
-  main{padding:22px 28px 60px;max-width:1400px;margin:0 auto;}
-  .kpis{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-    gap:16px;
-    margin-bottom:22px;
-  }
-  .kpi{
-    background:var(--card);
-    border-radius:8px;
-    border:1px solid var(--border);
-    padding:16px 18px;
-    box-shadow:0 1px 3px rgba(0,0,0,.06);
-  }
-  .kpi .label{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
-  .kpi .value{font-size:1.9rem;font-weight:700;margin-top:4px;}
-  .kpi .sub{font-size:.78rem;color:var(--muted);margin-top:2px;}
-  .charts{
-    display:grid;
-    grid-template-columns:1.2fr 1fr;
-    gap:16px;
-    margin-bottom:22px;
-  }
-  .card{
-    background:var(--card);
-    border-radius:8px;
-    border:1px solid var(--border);
-    padding:18px;
-    box-shadow:0 1px 3px rgba(0,0,0,.06);
-  }
-  .card h2{margin:0 0 12px;font-size:1rem;}
-  .chart-wrap{position:relative;height:280px;}
-  table{width:100%;border-collapse:collapse;font-size:.88rem;}
-  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);}
-  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;}
-  tr:hover td{background:#faf9f8;}
-  .badge{
-    display:inline-block;
-    padding:2px 8px;
-    border-radius:12px;
-    font-size:.75rem;
-    font-weight:700;
-    color:#fff;
-    margin-right:4px;
-  }
-  .score-green{background:var(--green);}
-  .score-yellow{background:var(--yellow);}
-  .score-red{background:var(--red);}
-  .cat-pill{
-    display:inline-flex;
-    align-items:center;
-    gap:5px;
-    font-size:.72rem;
-    padding:2px 8px;
-    border-radius:10px;
-    background:#f3f2f1;
-    margin:2px 3px 2px 0;
-    white-space:nowrap;
-  }
-  .cat-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
-  .link{color:#0b5fff;cursor:pointer;font-weight:600;font-size:.85rem;}
-  .empty{padding:40px;text-align:center;color:var(--muted);}
-  .overlay{
-    position:fixed;inset:0;background:rgba(0,0,0,.45);
-    display:none;align-items:flex-start;justify-content:center;
-    padding:40px 16px;overflow:auto;z-index:50;
-  }
-  .overlay.open{display:flex;}
-  .modal{
-    background:var(--card);
-    border-radius:10px;
-    max-width:760px;width:100%;
-    padding:26px 28px;
-    position:relative;
-  }
-  .modal h2{margin-top:0;}
-  .modal .close{
-    position:absolute;top:14px;right:18px;
-    background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);
-  }
-  .modal-section{margin-top:18px;}
-  .modal-section h3{
-    font-size:.85rem;text-transform:uppercase;color:var(--muted);
-    margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:4px;
-  }
-  .qrow{display:flex;justify-content:space-between;gap:14px;padding:6px 0;font-size:.88rem;border-bottom:1px dashed var(--border);}
-  .qrow:last-child{border-bottom:none;}
-  .qtext{flex:1;}
-  .qscore{font-weight:700;min-width:28px;text-align:right;}
-  .textblock{background:#faf9f8;border-radius:6px;padding:10px 12px;font-size:.88rem;white-space:pre-wrap;margin-top:4px;}
-  footer{text-align:center;color:var(--muted);font-size:.75rem;padding:20px;}
-  .loading{padding:60px;text-align:center;color:var(--muted);}
-</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="data.js"></script>
 </head>
 <body>
 
@@ -148,9 +16,11 @@
   <div>
     <h1>Painel de Avaliação de Colaboradores</h1>
     <div class="meta" id="lastUpdated">Carregando dados...</div>
+    <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
   </div>
-  <div style="display:flex;gap:8px;">
-    <a class="btn" id="downloadBtn" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;">Baixar CSV</a>
+  <div class="header-actions">
+    <a class="btn btn-secondary" href="categorias.html">Ver por categoria</a>
+    <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
     <button class="btn" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
@@ -169,34 +39,18 @@
 </div>
 
 <script>
-// ==== CONFIG ====
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTgaz_Xppuf6aUcKpMu30bln-5repgU5cGj7gkSc9UMI9Ru_nyJ_dVTpLPnsTqFNjAhQseBmrTCqJLO/pub?output=csv";
-const REFRESH_MS = 5 * 60 * 1000;
-const CATEGORY_COLORS = ["#4C9AFF","#36B37E","#FFAB00","#6554C0","#FF5630","#00B8D9","#B0BEC5"];
-
-let categoryColorMap = {};
 let charts = {};
-
-function scoreClass(v){
-  if(v >= 4.5) return "score-green";
-  if(v >= 3.5) return "score-yellow";
-  return "score-red";
-}
-
-function fmt(v){ return (Math.round(v*100)/100).toFixed(2); }
+let lastData = null;
 
 async function loadData(){
   document.getElementById("loadingMsg").style.display = "block";
   try{
-    if(typeof Papa === "undefined" || typeof Chart === "undefined"){
-      throw new Error("Bibliotecas externas (PapaParse/Chart.js) não carregaram. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
+    if(typeof Chart === "undefined"){
+      throw new Error("Biblioteca Chart.js não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
     }
-    const url = CSV_URL + (CSV_URL.includes("?") ? "&" : "?") + "_ts=" + Date.now();
-    const res = await fetch(url, {cache:"no-store"});
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    const text = await res.text();
-    const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
-    render(parsed.data, parsed.meta.fields);
+    const data = await loadDashboardData();
+    lastData = data;
+    render(data);
     document.getElementById("lastUpdated").textContent =
       "Última atualização: " + new Date().toLocaleString("pt-BR");
   }catch(err){
@@ -206,67 +60,13 @@ async function loadData(){
   }
 }
 
-function parseFields(fields){
-  const questionFields = [];
-  const metaFields = [];
-  fields.forEach(f => {
-    if(f.includes("\n")){
-      const idx = f.indexOf("\n");
-      const category = f.slice(0, idx).trim();
-      const question = f.slice(idx+1).trim();
-      questionFields.push({field:f, category, question});
-    } else if(f && f.trim() !== ""){
-      metaFields.push(f);
-    }
-  });
-  return {questionFields, metaFields};
-}
-
-function render(rows, fields){
-  rows = rows.filter(r => Object.values(r).some(v => v && String(v).trim() !== ""));
-  const {questionFields, metaFields} = parseFields(fields);
-  const timestampField = metaFields[0];
-  const textFields = metaFields.slice(1);
-
-  // category order = first appearance
-  const categories = [];
-  questionFields.forEach(q => { if(!categories.includes(q.category)) categories.push(q.category); });
-  categories.forEach((c,i) => categoryColorMap[c] = CATEGORY_COLORS[i % CATEGORY_COLORS.length]);
+function render(data){
+  const {rows, questionFields, categories, categoryColorMap, rowStats, overallAvg, catOverallAvg, bestCat, worstCat, bestResponse, worstResponse, textFields, timestampField} = data;
 
   if(rows.length === 0){
     document.getElementById("main").innerHTML = '<div class="empty">Ainda não há respostas registradas.</div>';
     return;
   }
-
-  // compute per-row stats
-  const rowStats = rows.map(r => {
-    const catScores = {};
-    categories.forEach(c => catScores[c] = []);
-    questionFields.forEach(q => {
-      const v = parseFloat(r[q.field]);
-      if(!isNaN(v)) catScores[q.category].push(v);
-    });
-    const catAvg = {};
-    let allScores = [];
-    categories.forEach(c => {
-      const arr = catScores[c];
-      catAvg[c] = arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-      allScores = allScores.concat(arr);
-    });
-    const overall = allScores.length ? allScores.reduce((a,b)=>a+b,0)/allScores.length : null;
-    return {row:r, catAvg, overall, timestamp:r[timestampField]};
-  });
-
-  // aggregate across all responses
-  const overallAvg = rowStats.reduce((a,s)=>a+(s.overall||0),0) / rowStats.length;
-  const catOverallAvg = {};
-  categories.forEach(c => {
-    const vals = rowStats.map(s=>s.catAvg[c]).filter(v=>v!==null);
-    catOverallAvg[c] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-  });
-  const sortedCats = categories.slice().sort((a,b)=>(catOverallAvg[b]||0)-(catOverallAvg[a]||0));
-  const bestCat = sortedCats[0];
-  const worstCat = sortedCats[sortedCats.length-1];
 
   const main = document.getElementById("main");
   main.innerHTML = `
@@ -282,13 +82,23 @@ function render(rows, fields){
       </div>
       <div class="kpi">
         <div class="label">Categoria mais forte</div>
-        <div class="value" style="font-size:1.1rem;">${bestCat}</div>
+        <div class="value" style="font-size:1.1rem;">${bestCat ?? "-"}</div>
         <div class="sub">${fmt(catOverallAvg[bestCat])}</div>
       </div>
       <div class="kpi">
         <div class="label">Categoria a desenvolver</div>
-        <div class="value" style="font-size:1.1rem;">${worstCat}</div>
+        <div class="value" style="font-size:1.1rem;">${worstCat ?? "-"}</div>
         <div class="sub">${fmt(catOverallAvg[worstCat])}</div>
+      </div>
+      <div class="kpi clickable" id="bestResponseCard">
+        <div class="label">Resposta mais forte</div>
+        <div class="value"><span class="badge ${scoreClass(bestResponse?.overall)}">${fmt(bestResponse?.overall)}</span></div>
+        <div class="sub">${bestResponse?.timestamp ?? "-"} · clique para ver detalhes</div>
+      </div>
+      <div class="kpi clickable" id="worstResponseCard">
+        <div class="label">Resposta a desenvolver</div>
+        <div class="value"><span class="badge ${scoreClass(worstResponse?.overall)}">${fmt(worstResponse?.overall)}</span></div>
+        <div class="sub">${worstResponse?.timestamp ?? "-"} · clique para ver detalhes</div>
       </div>
     </div>
 
@@ -303,7 +113,7 @@ function render(rows, fields){
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:22px;">
+    <div class="card">
       <h2>Evolução da média geral por resposta</h2>
       <div class="chart-wrap" style="height:220px;"><canvas id="trendChart"></canvas></div>
     </div>
@@ -391,7 +201,7 @@ function render(rows, fields){
     const tr = document.createElement("tr");
     const pills = categories.map(c => {
       const v = s.catAvg[c];
-      return `<span class="cat-pill"><span class="cat-dot" style="background:${categoryColorMap[c]}"></span>${c}: ${v!==null?fmt(v):"-"}</span>`;
+      return `<span class="cat-pill"><span class="cat-dot" style="background:${categoryColorMap[c]}"></span>${c}: ${fmt(v)}</span>`;
     }).join("");
     tr.innerHTML = `
       <td>${s.timestamp || "-"}</td>
@@ -403,47 +213,18 @@ function render(rows, fields){
   });
 
   tbody.querySelectorAll(".link").forEach(el => {
-    el.addEventListener("click", () => openDetail(rowStats[el.dataset.idx], questionFields, categories, textFields, timestampField));
-  });
-}
-
-function openDetail(stat, questionFields, categories, textFields, timestampField){
-  const row = stat.row;
-  let html = `<h2>Resposta de ${row[timestampField] || "-"}</h2>
-    <div><span class="badge ${scoreClass(stat.overall)}">Média geral: ${fmt(stat.overall)}</span></div>`;
-
-  categories.forEach(cat => {
-    html += `<div class="modal-section"><h3>${cat} — média ${stat.catAvg[cat]!==null?fmt(stat.catAvg[cat]):"-"}</h3>`;
-    questionFields.filter(q => q.category === cat).forEach(q => {
-      const v = row[q.field];
-      html += `<div class="qrow"><span class="qtext">${q.question}</span><span class="qscore">${v || "-"}</span></div>`;
-    });
-    html += `</div>`;
+    el.addEventListener("click", () => openDetailModal(rowStats[el.dataset.idx], data));
   });
 
-  if(textFields.length){
-    html += `<div class="modal-section"><h3>Comentários</h3>`;
-    textFields.forEach(tf => {
-      const val = row[tf];
-      if(val && val.trim() !== ""){
-        html += `<div style="margin-bottom:10px;"><strong>${tf}</strong><div class="textblock">${val}</div></div>`;
-      }
-    });
-    html += `</div>`;
-  }
-
-  document.getElementById("modalBody").innerHTML = html;
-  document.getElementById("overlay").classList.add("open");
+  const bestCard = document.getElementById("bestResponseCard");
+  const worstCard = document.getElementById("worstResponseCard");
+  if(bestCard && bestResponse) bestCard.addEventListener("click", () => openDetailModal(bestResponse, data));
+  if(worstCard && worstResponse) worstCard.addEventListener("click", () => openDetailModal(worstResponse, data));
 }
 
-document.getElementById("closeModal").addEventListener("click", () => {
-  document.getElementById("overlay").classList.remove("open");
-});
-document.getElementById("overlay").addEventListener("click", (e) => {
-  if(e.target.id === "overlay") document.getElementById("overlay").classList.remove("open");
-});
+wireModalClose();
 document.getElementById("refreshBtn").addEventListener("click", loadData);
-document.getElementById("downloadBtn").href = CSV_URL;
+document.getElementById("downloadBtn").addEventListener("click", () => downloadExcelFromData(lastData));
 
 loadData();
 setInterval(loadData, REFRESH_MS);

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel por Categoria — Avaliação de Colaboradores</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="data.js"></script>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Painel por Categoria</h1>
+    <div class="meta" id="lastUpdated">Carregando dados...</div>
+    <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
+  </div>
+  <div class="header-actions">
+    <a class="btn btn-secondary" href="index.html">← Voltar ao painel</a>
+    <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
+    <button class="btn" id="refreshBtn">Atualizar agora</button>
+  </div>
+</header>
+
+<main id="main">
+  <div class="loading" id="loadingMsg">Buscando respostas da planilha…</div>
+</main>
+
+<footer>Dados carregados diretamente do Google Sheets publicado. Atualiza automaticamente a cada 5 minutos.</footer>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <button class="close" id="closeModal">&times;</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+let charts = {};
+let lastData = null;
+
+async function loadData(){
+  document.getElementById("loadingMsg").style.display = "block";
+  try{
+    if(typeof Chart === "undefined"){
+      throw new Error("Biblioteca Chart.js não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
+    }
+    const data = await loadDashboardData();
+    lastData = data;
+    render(data);
+    document.getElementById("lastUpdated").textContent =
+      "Última atualização: " + new Date().toLocaleString("pt-BR");
+  }catch(err){
+    document.getElementById("main").innerHTML =
+      '<div class="empty">Não foi possível carregar os dados agora. (' + err.message + ')<br>Verifique se o link do CSV publicado ainda está ativo.</div>';
+    console.error(err);
+  }
+}
+
+function render(data){
+  const {rows, questionFields, categories, categoryColorMap, rowStats, catOverallAvg, textFields, timestampField} = data;
+
+  if(rows.length === 0){
+    document.getElementById("main").innerHTML = '<div class="empty">Ainda não há respostas registradas.</div>';
+    return;
+  }
+
+  const main = document.getElementById("main");
+  main.innerHTML = categories.map((cat, ci) => `
+    <div class="card">
+      <h2><span class="cat-dot" style="background:${categoryColorMap[cat]}"></span>${cat}
+        <span class="badge ${scoreClass(catOverallAvg[cat])}" style="margin-left:auto;">${fmt(catOverallAvg[cat])}</span>
+      </h2>
+      <div class="chart-wrap" style="height:220px;"><canvas id="cat-chart-${ci}"></canvas></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Média em ${cat}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="cat-rows-${ci}"></tbody>
+      </table>
+    </div>
+  `).join("");
+
+  categories.forEach((cat, ci) => {
+    if(charts["cat"+ci]) charts["cat"+ci].destroy();
+    charts["cat"+ci] = new Chart(document.getElementById("cat-chart-"+ci), {
+      type: "bar",
+      data: {
+        labels: rowStats.map(s => s.timestamp),
+        datasets: [{
+          label: "Média em " + cat,
+          data: rowStats.map(s => s.catAvg[cat]),
+          backgroundColor: categoryColorMap[cat]
+        }]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        scales:{ y:{ min:0, max:5 } },
+        plugins:{ legend:{display:false} }
+      }
+    });
+
+    const tbody = document.getElementById("cat-rows-"+ci);
+    tbody.innerHTML = "";
+    rowStats.forEach((s, idx) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${s.timestamp || "-"}</td>
+        <td><span class="badge ${scoreClass(s.catAvg[cat])}">${fmt(s.catAvg[cat])}</span></td>
+        <td><span class="link" data-idx="${idx}">Ver detalhes</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll(".link").forEach(el => {
+      el.addEventListener("click", () => openDetailModal(rowStats[el.dataset.idx], data));
+    });
+  });
+}
+
+wireModalClose();
+document.getElementById("refreshBtn").addEventListener("click", loadData);
+document.getElementById("downloadBtn").addEventListener("click", () => downloadExcelFromData(lastData));
+
+loadData();
+setInterval(loadData, REFRESH_MS);
+</script>
+</body>
+</html>
