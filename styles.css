@@ -3,7 +3,7 @@
   --card:#ffffff;
   --text:#252423;
   --muted:#605e5c;
-  --accent:#F2C811;
+  --accent:#002D72;
   --border:#e1dfdd;
   --green:#2e8b57;
   --yellow:#c9971d;
@@ -31,7 +31,7 @@ header .meta{font-size:.8rem;color:var(--muted);}
 .btn{
   background:var(--accent);
   border:none;
-  color:#252423;
+  color:#ffffff;
   padding:8px 16px;
   border-radius:4px;
   font-weight:600;
@@ -65,6 +65,13 @@ main{padding:22px 28px 60px;max-width:1400px;margin:0 auto;}
 .kpi .label{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
 .kpi .value{font-size:1.9rem;font-weight:700;margin-top:4px;}
 .kpi .sub{font-size:.78rem;color:var(--muted);margin-top:2px;}
+.kpi .sub.question{font-size:.85rem;color:var(--text);margin-top:8px;line-height:1.35;}
+.badge-lg{
+  font-size:1.8rem;
+  font-weight:800;
+  padding:2px 16px;
+  border-radius:8px;
+}
 .charts{
   display:grid;
   grid-template-columns:1.2fr 1fr;
@@ -139,6 +146,7 @@ tr:hover td{background:#faf9f8;}
 .qtext{flex:1;}
 .qscore{font-weight:700;min-width:28px;text-align:right;}
 .textblock{background:#faf9f8;border-radius:6px;padding:10px 12px;font-size:.88rem;white-space:pre-wrap;margin-top:4px;}
+.cat-subtitle{font-size:.82rem;color:var(--muted);font-style:italic;margin:-6px 0 12px;}
 footer{text-align:center;color:var(--muted);font-size:.75rem;padding:20px;}
 .loading{padding:60px;text-align:center;color:var(--muted);}
 .header-actions{display:flex;gap:8px;flex-wrap:wrap;}

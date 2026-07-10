@@ -61,7 +61,7 @@ async function loadData(){
 }
 
 function render(data){
-  const {rows, questionFields, categories, categoryColorMap, rowStats, catOverallAvg, textFields, timestampField} = data;
+  const {rows, questionFields, categories, categoryColorMap, categorySubtitles, catOverallAvg, questionAvg, bestQuestion, worstQuestion} = data;
 
   if(rows.length === 0){
     document.getElementById("main").innerHTML = '<div class="empty">Ainda não há respostas registradas.</div>';
@@ -69,57 +69,79 @@ function render(data){
   }
 
   const main = document.getElementById("main");
-  main.innerHTML = categories.map((cat, ci) => `
+
+  const kpisHTML = `
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Pergunta mais forte</div>
+        <div class="value"><span class="badge badge-lg ${scoreClass(bestQuestion?.avg)}">${fmt(bestQuestion?.avg)}</span></div>
+        <div class="sub">${bestQuestion?.category ?? "-"}</div>
+        <div class="sub question">${bestQuestion?.question ?? "-"}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Pergunta a desenvolver</div>
+        <div class="value"><span class="badge badge-lg ${scoreClass(worstQuestion?.avg)}">${fmt(worstQuestion?.avg)}</span></div>
+        <div class="sub">${worstQuestion?.category ?? "-"}</div>
+        <div class="sub question">${worstQuestion?.question ?? "-"}</div>
+      </div>
+    </div>
+  `;
+
+  const sectionsHTML = categories.map((cat, ci) => {
+    const qs = questionFields.filter(q => q.category === cat);
+    const chartHeight = Math.max(qs.length * 42 + 20, 140);
+    return `
     <div class="card">
       <h2><span class="cat-dot" style="background:${categoryColorMap[cat]}"></span>${cat}
         <span class="badge ${scoreClass(catOverallAvg[cat])}" style="margin-left:auto;">${fmt(catOverallAvg[cat])}</span>
       </h2>
-      <div class="chart-wrap" style="height:220px;"><canvas id="cat-chart-${ci}"></canvas></div>
+      ${categorySubtitles[cat] ? `<div class="cat-subtitle">${categorySubtitles[cat]}</div>` : ""}
+      <div class="chart-wrap" style="height:${chartHeight}px;"><canvas id="cat-chart-${ci}"></canvas></div>
       <table>
         <thead>
           <tr>
-            <th>Data/Hora</th>
-            <th>Média em ${cat}</th>
-            <th></th>
+            <th>Pergunta</th>
+            <th>Média</th>
           </tr>
         </thead>
         <tbody id="cat-rows-${ci}"></tbody>
       </table>
     </div>
-  `).join("");
+  `;
+  }).join("");
+
+  main.innerHTML = kpisHTML + sectionsHTML;
 
   categories.forEach((cat, ci) => {
+    const qs = questionFields.filter(q => q.category === cat);
     if(charts["cat"+ci]) charts["cat"+ci].destroy();
     charts["cat"+ci] = new Chart(document.getElementById("cat-chart-"+ci), {
       type: "bar",
       data: {
-        labels: rowStats.map(s => s.timestamp),
+        labels: qs.map(q => wrapLabel(q.question)),
         datasets: [{
-          label: "Média em " + cat,
-          data: rowStats.map(s => s.catAvg[cat]),
+          label: "Média",
+          data: qs.map(q => questionAvg[q.field]),
           backgroundColor: categoryColorMap[cat]
         }]
       },
       options: {
+        indexAxis: "y",
         responsive:true, maintainAspectRatio:false,
-        scales:{ y:{ min:0, max:5 } },
+        scales:{ x:{ min:0, max:5 }, y:{ ticks:{ autoSkip:false } } },
         plugins:{ legend:{display:false} }
       }
     });
 
     const tbody = document.getElementById("cat-rows-"+ci);
     tbody.innerHTML = "";
-    rowStats.forEach((s, idx) => {
+    qs.forEach(q => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${s.timestamp || "-"}</td>
-        <td><span class="badge ${scoreClass(s.catAvg[cat])}">${fmt(s.catAvg[cat])}</span></td>
-        <td><span class="link" data-idx="${idx}">Ver detalhes</span></td>
+        <td>${q.question}</td>
+        <td><span class="badge ${scoreClass(questionAvg[q.field])}">${fmt(questionAvg[q.field])}</span></td>
       `;
       tbody.appendChild(tr);
-    });
-    tbody.querySelectorAll(".link").forEach(el => {
-      el.addEventListener("click", () => openDetailModal(rowStats[el.dataset.idx], data));
     });
   });
 }

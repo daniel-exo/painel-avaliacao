@@ -61,7 +61,7 @@ async function loadData(){
 }
 
 function render(data){
-  const {rows, questionFields, categories, categoryColorMap, rowStats, overallAvg, catOverallAvg, bestCat, worstCat, bestResponse, worstResponse, textFields, timestampField} = data;
+  const {rows, questionFields, categories, categoryColorMap, rowStats, overallAvg, catOverallAvg, bestCat, worstCat, textFields, timestampField} = data;
 
   if(rows.length === 0){
     document.getElementById("main").innerHTML = '<div class="empty">Ainda não há respostas registradas.</div>';
@@ -77,28 +77,18 @@ function render(data){
       </div>
       <div class="kpi">
         <div class="label">Média geral</div>
-        <div class="value"><span class="badge ${scoreClass(overallAvg)}">${fmt(overallAvg)}</span></div>
+        <div class="value"><span class="badge badge-lg ${scoreClass(overallAvg)}">${fmt(overallAvg)}</span></div>
         <div class="sub">escala de 1 a 5</div>
       </div>
       <div class="kpi">
         <div class="label">Categoria mais forte</div>
-        <div class="value" style="font-size:1.1rem;">${bestCat ?? "-"}</div>
-        <div class="sub">${fmt(catOverallAvg[bestCat])}</div>
+        <div class="value"><span class="badge badge-lg ${scoreClass(catOverallAvg[bestCat])}">${fmt(catOverallAvg[bestCat])}</span></div>
+        <div class="sub">${bestCat ?? "-"}</div>
       </div>
       <div class="kpi">
         <div class="label">Categoria a desenvolver</div>
-        <div class="value" style="font-size:1.1rem;">${worstCat ?? "-"}</div>
-        <div class="sub">${fmt(catOverallAvg[worstCat])}</div>
-      </div>
-      <div class="kpi clickable" id="bestResponseCard">
-        <div class="label">Resposta mais forte</div>
-        <div class="value"><span class="badge ${scoreClass(bestResponse?.overall)}">${fmt(bestResponse?.overall)}</span></div>
-        <div class="sub">${bestResponse?.timestamp ?? "-"} · clique para ver detalhes</div>
-      </div>
-      <div class="kpi clickable" id="worstResponseCard">
-        <div class="label">Resposta a desenvolver</div>
-        <div class="value"><span class="badge ${scoreClass(worstResponse?.overall)}">${fmt(worstResponse?.overall)}</span></div>
-        <div class="sub">${worstResponse?.timestamp ?? "-"} · clique para ver detalhes</div>
+        <div class="value"><span class="badge badge-lg ${scoreClass(catOverallAvg[worstCat])}">${fmt(catOverallAvg[worstCat])}</span></div>
+        <div class="sub">${worstCat ?? "-"}</div>
       </div>
     </div>
 
@@ -162,9 +152,9 @@ function render(data){
       datasets:[{
         label:"Média por categoria",
         data: categories.map(c => catOverallAvg[c]),
-        backgroundColor:"rgba(242,200,17,0.25)",
-        borderColor:"#c9971d",
-        pointBackgroundColor:"#c9971d"
+        backgroundColor:"rgba(0,45,114,0.20)",
+        borderColor:"#002D72",
+        pointBackgroundColor:"#002D72"
       }]
     },
     options:{
@@ -215,11 +205,6 @@ function render(data){
   tbody.querySelectorAll(".link").forEach(el => {
     el.addEventListener("click", () => openDetailModal(rowStats[el.dataset.idx], data));
   });
-
-  const bestCard = document.getElementById("bestResponseCard");
-  const worstCard = document.getElementById("worstResponseCard");
-  if(bestCard && bestResponse) bestCard.addEventListener("click", () => openDetailModal(bestResponse, data));
-  if(worstCard && worstResponse) worstCard.addEventListener("click", () => openDetailModal(worstResponse, data));
 }
 
 wireModalClose();

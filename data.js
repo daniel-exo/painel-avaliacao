@@ -17,20 +17,36 @@ function fmt(v){
   return (Math.round(v*100)/100).toFixed(2);
 }
 
+// Um cabeçalho de pergunta vem no formato:
+// "CATEGORIA\nFrase de valor da categoria. [Pergunta específica sobre o colaborador.]"
+// Separamos a categoria, a frase de valor (usada como subtítulo da categoria)
+// e a pergunta em si (sem colchetes), para não repetir a frase de valor em cada linha.
 function parseFields(fields){
   const questionFields = [];
   const metaFields = [];
+  const categorySubtitles = {};
   fields.forEach(f => {
     if(f.includes("\n")){
       const idx = f.indexOf("\n");
       const category = f.slice(0, idx).trim();
-      const question = f.slice(idx+1).trim();
+      const remainder = f.slice(idx+1).trim();
+      const openIdx = remainder.indexOf("[");
+      const closeIdx = remainder.lastIndexOf("]");
+      let question, subtitle;
+      if(openIdx !== -1 && closeIdx > openIdx){
+        subtitle = remainder.slice(0, openIdx).trim();
+        question = remainder.slice(openIdx+1, closeIdx).trim();
+      } else {
+        subtitle = null;
+        question = remainder;
+      }
+      if(subtitle && !categorySubtitles[category]) categorySubtitles[category] = subtitle;
       questionFields.push({field:f, category, question});
     } else if(f && f.trim() !== ""){
       metaFields.push(f);
     }
   });
-  return {questionFields, metaFields};
+  return {questionFields, metaFields, categorySubtitles};
 }
 
 // Busca o CSV publicado, parseia e devolve todos os dados já agregados.
@@ -45,7 +61,7 @@ async function loadDashboardData(){
   const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
 
   const rows = parsed.data.filter(r => Object.values(r).some(v => v && String(v).trim() !== ""));
-  const {questionFields, metaFields} = parseFields(parsed.meta.fields);
+  const {questionFields, metaFields, categorySubtitles} = parseFields(parsed.meta.fields);
   const timestampField = metaFields[0];
   const textFields = metaFields.slice(1);
 
@@ -92,23 +108,40 @@ async function loadDashboardData(){
     if(!worstResponse || s.overall < worstResponse.overall) worstResponse = s;
   });
 
+  // Média de cada pergunta individual, considerando todas as respostas.
+  const questionAvg = {};
+  questionFields.forEach(q => {
+    const vals = rows.map(r => parseFloat(r[q.field])).filter(v => !isNaN(v));
+    questionAvg[q.field] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+
+  let bestQuestion = null, worstQuestion = null;
+  questionFields.forEach(q => {
+    const avg = questionAvg[q.field];
+    if(avg === null) return;
+    if(!bestQuestion || avg > bestQuestion.avg) bestQuestion = {...q, avg};
+    if(!worstQuestion || avg < worstQuestion.avg) worstQuestion = {...q, avg};
+  });
+
   return {
     rows, questionFields, metaFields, timestampField, textFields,
-    categories, categoryColorMap, rowStats,
+    categories, categoryColorMap, categorySubtitles, rowStats,
     overallAvg, catOverallAvg, bestCat, worstCat,
-    bestResponse, worstResponse
+    bestResponse, worstResponse, questionAvg, bestQuestion, worstQuestion
   };
 }
 
 // Monta o HTML do modal de detalhe de uma resposta (usado nas duas páginas).
 function buildDetailHTML(stat, data){
-  const {questionFields, categories, textFields, timestampField} = data;
+  const {questionFields, categories, categorySubtitles, textFields, timestampField} = data;
   const row = stat.row;
   let html = `<h2>Resposta de ${row[timestampField] || "-"}</h2>
     <div><span class="badge ${scoreClass(stat.overall)}">Média geral: ${fmt(stat.overall)}</span></div>`;
 
   categories.forEach(cat => {
+    const subtitle = categorySubtitles && categorySubtitles[cat];
     html += `<div class="modal-section"><h3>${cat} — média ${fmt(stat.catAvg[cat])}</h3>`;
+    if(subtitle) html += `<div class="cat-subtitle">${subtitle}</div>`;
     questionFields.filter(q => q.category === cat).forEach(q => {
       const v = row[q.field];
       html += `<div class="qrow"><span class="qtext">${q.question}</span><span class="qscore">${v || "-"}</span></div>`;
@@ -133,6 +166,24 @@ function buildDetailHTML(stat, data){
 function openDetailModal(stat, data){
   document.getElementById("modalBody").innerHTML = buildDetailHTML(stat, data);
   document.getElementById("overlay").classList.add("open");
+}
+
+// Quebra um texto longo em várias linhas (para rótulos de gráfico).
+function wrapLabel(text, maxLen){
+  maxLen = maxLen || 42;
+  const words = String(text).split(" ");
+  const lines = [];
+  let cur = "";
+  words.forEach(w => {
+    if((cur + " " + w).trim().length > maxLen){
+      if(cur) lines.push(cur.trim());
+      cur = w;
+    } else {
+      cur = (cur + " " + w).trim();
+    }
+  });
+  if(cur) lines.push(cur.trim());
+  return lines;
 }
 
 // Liga os botões de fechar do modal (chamar uma vez em cada página).
