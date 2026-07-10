@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Avaliação de Colaboradores</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 <style>
   :root{
     --bg:#f3f2f1;
@@ -188,6 +188,9 @@ function fmt(v){ return (Math.round(v*100)/100).toFixed(2); }
 async function loadData(){
   document.getElementById("loadingMsg").style.display = "block";
   try{
+    if(typeof Papa === "undefined" || typeof Chart === "undefined"){
+      throw new Error("Bibliotecas externas (PapaParse/Chart.js) não carregaram. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
+    }
     const url = CSV_URL + (CSV_URL.includes("?") ? "&" : "?") + "_ts=" + Date.now();
     const res = await fetch(url, {cache:"no-store"});
     if(!res.ok) throw new Error("HTTP " + res.status);
