@@ -19,9 +19,9 @@
     <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
   </div>
   <div class="header-actions">
-    <a class="btn btn-secondary" href="categorias.html">Ver por categoria</a>
+    <a class="btn btn-blue" href="categorias.html">Ver por categoria</a>
     <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
-    <button class="btn" id="refreshBtn">Atualizar agora</button>
+    <button class="btn btn-green" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
 
@@ -29,7 +29,10 @@
   <div class="loading" id="loadingMsg">Buscando respostas da planilha…</div>
 </main>
 
-<footer>Dados carregados diretamente do Google Sheets publicado. Atualiza automaticamente a cada 5 minutos.</footer>
+<footer>
+  <img class="footer-logo" src="exo-logo.png" alt="EXO">
+  <div>Dados carregados diretamente do Google Sheets publicado. Atualiza automaticamente a cada 5 minutos.</div>
+</footer>
 
 <div class="overlay" id="overlay">
   <div class="modal">
@@ -77,17 +80,17 @@ function render(data){
       </div>
       <div class="kpi">
         <div class="label">Média geral</div>
-        <div class="value"><span class="badge badge-lg ${scoreClass(overallAvg)}">${fmt(overallAvg)}</span></div>
+        <div class="value ${scoreTextClass(overallAvg)}">${fmt(overallAvg)}</div>
         <div class="sub">escala de 1 a 5</div>
       </div>
       <div class="kpi">
         <div class="label">Categoria mais forte</div>
-        <div class="value"><span class="badge badge-lg ${scoreClass(catOverallAvg[bestCat])}">${fmt(catOverallAvg[bestCat])}</span></div>
+        <div class="value ${scoreTextClass(catOverallAvg[bestCat])}">${fmt(catOverallAvg[bestCat])}</div>
         <div class="sub">${bestCat ?? "-"}</div>
       </div>
       <div class="kpi">
         <div class="label">Categoria a desenvolver</div>
-        <div class="value"><span class="badge badge-lg ${scoreClass(catOverallAvg[worstCat])}">${fmt(catOverallAvg[worstCat])}</span></div>
+        <div class="value ${scoreTextClass(catOverallAvg[worstCat])}">${fmt(catOverallAvg[worstCat])}</div>
         <div class="sub">${worstCat ?? "-"}</div>
       </div>
     </div>

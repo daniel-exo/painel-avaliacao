@@ -12,6 +12,15 @@ function scoreClass(v){
   return "score-red";
 }
 
+// Mesma faixa de scoreClass, mas retorna uma classe que colore só o texto
+// (sem fundo), usada nos números grandes dos cards de KPI.
+function scoreTextClass(v){
+  if(v === null || v === undefined || isNaN(v)) return "";
+  if(v >= 4.5) return "score-text-green";
+  if(v >= 3.5) return "score-text-yellow";
+  return "score-text-red";
+}
+
 function fmt(v){
   if(v === null || v === undefined || isNaN(v)) return "-";
   return (Math.round(v*100)/100).toFixed(2);

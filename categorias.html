@@ -19,9 +19,9 @@
     <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
   </div>
   <div class="header-actions">
-    <a class="btn btn-secondary" href="index.html">← Voltar ao painel</a>
+    <a class="btn btn-blue" href="index.html">← Voltar ao painel</a>
     <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
-    <button class="btn" id="refreshBtn">Atualizar agora</button>
+    <button class="btn btn-green" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
 
@@ -29,7 +29,10 @@
   <div class="loading" id="loadingMsg">Buscando respostas da planilha…</div>
 </main>
 
-<footer>Dados carregados diretamente do Google Sheets publicado. Atualiza automaticamente a cada 5 minutos.</footer>
+<footer>
+  <img class="footer-logo" src="exo-logo.png" alt="EXO">
+  <div>Dados carregados diretamente do Google Sheets publicado. Atualiza automaticamente a cada 5 minutos.</div>
+</footer>
 
 <div class="overlay" id="overlay">
   <div class="modal">
@@ -74,13 +77,13 @@ function render(data){
     <div class="kpis">
       <div class="kpi">
         <div class="label">Pergunta mais forte</div>
-        <div class="value"><span class="badge badge-lg ${scoreClass(bestQuestion?.avg)}">${fmt(bestQuestion?.avg)}</span></div>
+        <div class="value ${scoreTextClass(bestQuestion?.avg)}">${fmt(bestQuestion?.avg)}</div>
         <div class="sub">${bestQuestion?.category ?? "-"}</div>
         <div class="sub question">${bestQuestion?.question ?? "-"}</div>
       </div>
       <div class="kpi">
         <div class="label">Pergunta a desenvolver</div>
-        <div class="value"><span class="badge badge-lg ${scoreClass(worstQuestion?.avg)}">${fmt(worstQuestion?.avg)}</span></div>
+        <div class="value ${scoreTextClass(worstQuestion?.avg)}">${fmt(worstQuestion?.avg)}</div>
         <div class="sub">${worstQuestion?.category ?? "-"}</div>
         <div class="sub question">${worstQuestion?.question ?? "-"}</div>
       </div>
