@@ -72,7 +72,14 @@ async function loadDashboardData(){
   const rows = parsed.data.filter(r => Object.values(r).some(v => v && String(v).trim() !== ""));
   const {questionFields, metaFields, categorySubtitles} = parseFields(parsed.meta.fields);
   const timestampField = metaFields[0];
-  const textFields = metaFields.slice(1);
+  const metaRest = metaFields.slice(1);
+
+  // Campos de identificação (adicionados quando o formulário passou a
+  // diferenciar autoavaliação de avaliação de colaborador).
+  const respondentField = metaRest.find(f => /seu nome completo/i.test(f)) || null;
+  const evaluatedField = metaRest.find(f => /nome completo da pessoa avaliada/i.test(f)) || null;
+  const evalTypeField = metaRest.find(f => /quem.*voc[eê].*avaliar/i.test(f)) || null;
+  const textFields = metaRest.filter(f => f !== respondentField && f !== evaluatedField && f !== evalTypeField);
 
   const categories = [];
   questionFields.forEach(q => { if(!categories.includes(q.category)) categories.push(q.category); });
@@ -94,7 +101,17 @@ async function loadDashboardData(){
       allScores = allScores.concat(arr);
     });
     const overall = allScores.length ? allScores.reduce((a,b)=>a+b,0)/allScores.length : null;
-    return {index:i, row:r, catAvg, overall, timestamp:r[timestampField]};
+
+    const evalType = evalTypeField ? String(r[evalTypeField] || "").trim() : "";
+    const isSelf = /auto/i.test(evalType);
+    const respondentName = respondentField ? String(r[respondentField] || "").trim() : "";
+    const evaluatedName = evaluatedField ? String(r[evaluatedField] || "").trim() : "";
+    const subjectName = isSelf ? respondentName : (evaluatedName || respondentName);
+
+    return {
+      index:i, row:r, catAvg, overall, timestamp:r[timestampField],
+      evalType, isSelf, respondentName, evaluatedName, subjectName
+    };
   });
 
   const validOverall = rowStats.map(s=>s.overall).filter(v=>v!==null);
@@ -134,10 +151,70 @@ async function loadDashboardData(){
 
   return {
     rows, questionFields, metaFields, timestampField, textFields,
+    respondentField, evaluatedField, evalTypeField,
     categories, categoryColorMap, categorySubtitles, rowStats,
     overallAvg, catOverallAvg, bestCat, worstCat,
     bestResponse, worstResponse, questionAvg, bestQuestion, worstQuestion
   };
+}
+
+// Lista (ordenada) de nomes de colaboradores que aparecem nas respostas,
+// seja como autoavaliação ou como avaliado por um colega.
+function getSubjectNames(data){
+  const names = new Set();
+  data.rowStats.forEach(s => { if(s.subjectName) names.add(s.subjectName); });
+  return Array.from(names).sort((a,b)=>a.localeCompare(b,"pt-BR"));
+}
+
+// Calcula, para um colaborador específico, a comparação entre a
+// autoavaliação dele e as avaliações recebidas de colegas — por categoria
+// e por pergunta.
+function computeComparison(data, subjectName){
+  const selfStats = data.rowStats.filter(s => s.isSelf && s.subjectName === subjectName);
+  const peerStats = data.rowStats.filter(s => !s.isSelf && s.subjectName === subjectName);
+
+  function avgOf(list, getter){
+    const vals = list.map(getter).filter(v => v !== null && v !== undefined && !isNaN(v));
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  }
+
+  const categoryComparison = data.categories.map(cat => {
+    const self = avgOf(selfStats, s => s.catAvg[cat]);
+    const peer = avgOf(peerStats, s => s.catAvg[cat]);
+    return {
+      category: cat,
+      self, peer,
+      diff: (self !== null && peer !== null) ? (self - peer) : null
+    };
+  });
+
+  const questionComparison = data.questionFields.map(q => {
+    const self = avgOf(selfStats, s => parseFloat(s.row[q.field]));
+    const peer = avgOf(peerStats, s => parseFloat(s.row[q.field]));
+    return {
+      field: q.field, category: q.category, question: q.question,
+      self, peer,
+      diff: (self !== null && peer !== null) ? (self - peer) : null
+    };
+  });
+
+  return {
+    subjectName,
+    selfCount: selfStats.length,
+    peerCount: peerStats.length,
+    categoryComparison,
+    questionComparison
+  };
+}
+
+// Colore pela magnitude do gap entre autoavaliação e avaliação de colegas
+// (não pela direção — um gap grande é digno de atenção nos dois sentidos).
+function gapClass(diff){
+  if(diff === null || diff === undefined || isNaN(diff)) return "";
+  const abs = Math.abs(diff);
+  if(abs <= 0.3) return "score-text-green";
+  if(abs <= 0.7) return "score-text-yellow";
+  return "score-text-red";
 }
 
 // Monta o HTML do modal de detalhe de uma resposta (usado nas duas páginas).
@@ -146,6 +223,14 @@ function buildDetailHTML(stat, data){
   const row = stat.row;
   let html = `<h2>Resposta de ${row[timestampField] || "-"}</h2>
     <div><span class="badge ${scoreClass(stat.overall)}">Média geral: ${fmt(stat.overall)}</span></div>`;
+
+  if(stat.respondentName || stat.evalType){
+    html += `<div class="modal-meta">`;
+    if(stat.respondentName) html += `<div><strong>Avaliador:</strong> ${stat.respondentName}</div>`;
+    html += `<div><strong>Tipo:</strong> ${stat.isSelf ? "Autoavaliação" : "Avaliação de colaborador"}</div>`;
+    if(!stat.isSelf && stat.evaluatedName) html += `<div><strong>Avaliado:</strong> ${stat.evaluatedName}</div>`;
+    html += `</div>`;
+  }
 
   categories.forEach(cat => {
     const subtitle = categorySubtitles && categorySubtitles[cat];
@@ -213,10 +298,18 @@ function downloadExcelFromData(data){
     alert("A biblioteca de geração de Excel não carregou. Verifique bloqueador de anúncios/firewall e tente novamente.");
     return;
   }
-  const headers = [data.timestampField, ...data.questionFields.map(q => q.category + " - " + q.question), ...data.textFields];
+  const idHeaders = [];
+  if(data.respondentField) idHeaders.push("Avaliador");
+  if(data.evalTypeField) idHeaders.push("Tipo de Avaliação");
+  if(data.evaluatedField) idHeaders.push("Avaliado");
+
+  const headers = [data.timestampField, ...idHeaders, ...data.questionFields.map(q => q.category + " - " + q.question), ...data.textFields];
   const aoa = [headers];
   data.rows.forEach(r => {
     const line = [r[data.timestampField]];
+    if(data.respondentField) line.push(r[data.respondentField]);
+    if(data.evalTypeField) line.push(r[data.evalTypeField]);
+    if(data.evaluatedField) line.push(r[data.evaluatedField]);
     data.questionFields.forEach(q => line.push(r[q.field]));
     data.textFields.forEach(tf => line.push(r[tf]));
     aoa.push(line);

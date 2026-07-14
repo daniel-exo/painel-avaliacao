@@ -149,6 +149,36 @@ tr:hover td{background:#faf9f8;}
 .qscore{font-weight:700;min-width:28px;text-align:right;}
 .textblock{background:#faf9f8;border-radius:6px;padding:10px 12px;font-size:.88rem;white-space:pre-wrap;margin-top:4px;}
 .cat-subtitle{font-size:.82rem;color:var(--muted);font-style:italic;margin:-6px 0 12px;}
+.modal-meta{
+  background:#faf9f8;
+  border-radius:6px;
+  padding:10px 12px;
+  margin-top:12px;
+  font-size:.85rem;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.selector-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:22px;
+}
+.selector-bar label{font-size:.85rem;font-weight:600;color:var(--muted);}
+.selector-bar select{
+  padding:8px 12px;
+  border-radius:4px;
+  border:1px solid var(--border);
+  font-family:inherit;
+  font-size:.9rem;
+  background:#fff;
+  color:var(--text);
+  min-width:220px;
+}
+.comparison-legend{display:flex;gap:16px;font-size:.8rem;color:var(--muted);margin-bottom:8px;}
+.legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 footer{
   background:var(--accent);
   color:#ffffff;
