@@ -118,6 +118,7 @@ tr:hover td{background:#faf9f8;}
   white-space:nowrap;
 }
 .cat-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.num-cell{font-weight:700;}
 .link{color:#0b5fff;cursor:pointer;font-weight:600;font-size:.85rem;}
 .empty{padding:40px;text-align:center;color:var(--muted);}
 .overlay{

@@ -16,13 +16,10 @@
   <div>
     <h1>Painel por Categoria</h1>
     <div class="meta" id="lastUpdated">Carregando dados...</div>
-    <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
+    <div class="meta">Desenvolvido pela EXO exclusivamente para a Indorama.</div>
   </div>
   <div class="header-actions">
     <a class="btn btn-blue" href="index.html">← Voltar ao painel</a>
-    <a class="btn btn-blue" href="comparativo.html">Comparativo</a>
-    <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
-    <button class="btn btn-green" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
 
@@ -170,8 +167,6 @@ function render(data, rowStats){
 }
 
 wireModalClose();
-document.getElementById("refreshBtn").addEventListener("click", loadData);
-document.getElementById("downloadBtn").addEventListener("click", () => downloadExcelFromData(lastData));
 
 loadData();
 setInterval(loadData, REFRESH_MS);

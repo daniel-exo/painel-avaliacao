@@ -16,12 +16,10 @@
   <div>
     <h1>Comparativo: Autoavaliação vs Colegas</h1>
     <div class="meta" id="lastUpdated">Carregando dados...</div>
-    <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
+    <div class="meta">Desenvolvido pela EXO exclusivamente para a Indorama.</div>
   </div>
   <div class="header-actions">
     <a class="btn btn-blue" href="index.html">← Voltar ao painel</a>
-    <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
-    <button class="btn btn-green" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
 
@@ -112,9 +110,9 @@ function renderComparison(data, rowStats, subjectLabel){
           ${comp.categoryComparison.map(c => `
             <tr>
               <td>${c.category}</td>
-              <td>${fmt(c.self)}</td>
-              <td>${fmt(c.peer)}</td>
-              <td class="${gapClass(c.diff)}">${diffLabel(c.diff)}</td>
+              <td class="num-cell">${fmt(c.self)}</td>
+              <td class="num-cell">${fmt(c.peer)}</td>
+              <td class="num-cell ${diffColorClass(c.diff)}">${diffLabel(c.diff)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -138,9 +136,9 @@ function renderComparison(data, rowStats, subjectLabel){
           ${qs.map(q => `
             <tr>
               <td>${q.question}</td>
-              <td>${fmt(q.self)}</td>
-              <td>${fmt(q.peer)}</td>
-              <td class="${gapClass(q.diff)}">${diffLabel(q.diff)}</td>
+              <td class="num-cell">${fmt(q.self)}</td>
+              <td class="num-cell">${fmt(q.peer)}</td>
+              <td class="num-cell ${diffColorClass(q.diff)}">${diffLabel(q.diff)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -193,9 +191,6 @@ function renderComparison(data, rowStats, subjectLabel){
     });
   });
 }
-
-document.getElementById("refreshBtn").addEventListener("click", loadData);
-document.getElementById("downloadBtn").addEventListener("click", () => downloadExcelFromData(lastData));
 
 loadData();
 setInterval(loadData, REFRESH_MS);

@@ -16,12 +16,12 @@
   <div>
     <h1>Painel de Avaliação de Colaboradores</h1>
     <div class="meta" id="lastUpdated">Carregando dados...</div>
-    <div class="meta">desenvolvido pela EXO exclusivamente para Indorama.</div>
+    <div class="meta">Desenvolvido pela EXO exclusivamente para a Indorama.</div>
   </div>
   <div class="header-actions">
-    <a class="btn btn-blue" href="categorias.html">Ver por categoria</a>
     <a class="btn btn-blue" href="comparativo.html">Comparativo</a>
-    <button class="btn btn-secondary" id="downloadBtn">Baixar Excel com todas as respostas</button>
+    <a class="btn btn-blue" href="categorias.html">Ver por categoria</a>
+    <button class="btn btn-secondary" id="downloadBtn">Baixar o Excel das respostas</button>
     <button class="btn btn-green" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
@@ -127,16 +127,13 @@ function render(data, rowStats){
     </div>
 
     <div class="card">
-      <h2>Evolução da média geral por resposta</h2>
-      <div class="chart-wrap" style="height:220px;"><canvas id="trendChart"></canvas></div>
-    </div>
-
-    <div class="card">
       <h2>Respostas individuais</h2>
       <table>
         <thead>
           <tr>
             <th>Data/Hora</th>
+            <th>Avaliador</th>
+            <th>Avaliado</th>
             <th>Média Geral</th>
             <th>Por categoria</th>
             <th></th>
@@ -186,27 +183,6 @@ function render(data, rowStats){
     }
   });
 
-  // trend chart
-  if(charts.trend) charts.trend.destroy();
-  charts.trend = new Chart(document.getElementById("trendChart"), {
-    type:"line",
-    data:{
-      labels: rowStats.map(s => s.timestamp),
-      datasets:[{
-        label:"Média geral",
-        data: rowStats.map(s => s.overall),
-        borderColor:"#0b5fff",
-        backgroundColor:"rgba(11,95,255,0.1)",
-        fill:true, tension:.25
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      scales:{ y:{ min:0, max:5 } },
-      plugins:{ legend:{display:false} }
-    }
-  });
-
   // table rows
   const tbody = document.getElementById("responseRows");
   tbody.innerHTML = "";
@@ -216,8 +192,11 @@ function render(data, rowStats){
       const v = s.catAvg[c];
       return `<span class="cat-pill"><span class="cat-dot" style="background:${categoryColorMap[c]}"></span>${c}: ${fmt(v)}</span>`;
     }).join("");
+    const avaliado = s.isSelf ? "Autoavaliação" : (s.evaluatedName || s.subjectName || "-");
     tr.innerHTML = `
       <td>${s.timestamp || "-"}</td>
+      <td>${s.respondentName || "-"}</td>
+      <td>${avaliado}</td>
       <td><span class="badge ${scoreClass(s.overall)}">${fmt(s.overall)}</span></td>
       <td>${pills}</td>
       <td><span class="link" data-idx="${idx}">Ver detalhes</span></td>

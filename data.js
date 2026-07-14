@@ -283,14 +283,15 @@ function computeComparison(rowStats, categories, questionFields){
   };
 }
 
-// Colore pela magnitude do gap entre autoavaliação e avaliação de colegas
-// (não pela direção — um gap grande é digno de atenção nos dois sentidos).
-function gapClass(diff){
+// Colore pela direção do gap entre autoavaliação e avaliação de colegas
+// (diff = autoavaliação - colegas): vermelho quando a pessoa se avalia
+// acima da média dos colegas, verde quando se avalia abaixo, preto (cor
+// padrão) quando os dois coincidem.
+function diffColorClass(diff){
   if(diff === null || diff === undefined || isNaN(diff)) return "";
-  const abs = Math.abs(diff);
-  if(abs <= 0.3) return "score-text-green";
-  if(abs <= 0.7) return "score-text-yellow";
-  return "score-text-red";
+  if(diff > 0) return "score-text-red";
+  if(diff < 0) return "score-text-green";
+  return "";
 }
 
 // Monta o HTML do modal de detalhe de uma resposta (usado nas páginas com modal).
