@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Avaliação de Colaboradores</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="data.js"></script>
+<script src="data.js?v=2"></script>
 </head>
 <body>
 
@@ -25,6 +25,19 @@
     <button class="btn btn-green" id="refreshBtn">Atualizar agora</button>
   </div>
 </header>
+
+<div class="filter-bar">
+  <div class="filter-bar-inner">
+    <div class="filter-field">
+      <label for="filterAvaliador">Avaliador</label>
+      <select id="filterAvaliador"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-field">
+      <label for="filterAvaliado">Avaliado</label>
+      <select id="filterAvaliado"><option value="">Todos</option></select>
+    </div>
+  </div>
+</div>
 
 <main id="main">
   <div class="loading" id="loadingMsg">Buscando respostas da planilha…</div>
@@ -54,7 +67,10 @@ async function loadData(){
     }
     const data = await loadDashboardData();
     lastData = data;
-    render(data);
+    initFilterBar(data, (av, ad) => {
+      const filtered = filterRowStats(data.rowStats, av, ad);
+      render(data, filtered);
+    });
     document.getElementById("lastUpdated").textContent =
       "Última atualização: " + new Date().toLocaleString("pt-BR");
   }catch(err){
@@ -64,13 +80,16 @@ async function loadData(){
   }
 }
 
-function render(data){
-  const {rows, questionFields, categories, categoryColorMap, rowStats, overallAvg, catOverallAvg, bestCat, worstCat, textFields, timestampField} = data;
+function render(data, rowStats){
+  const {categories, categoryColorMap} = data;
 
-  if(rows.length === 0){
-    document.getElementById("main").innerHTML = '<div class="empty">Ainda não há respostas registradas.</div>';
+  if(rowStats.length === 0){
+    document.getElementById("main").innerHTML = '<div class="empty">Nenhuma resposta encontrada para esse filtro.</div>';
     return;
   }
+
+  const agg = computeAggregates(rowStats, categories, data.questionFields);
+  const {overallAvg, catOverallAvg, bestCat, worstCat} = agg;
 
   const main = document.getElementById("main");
   main.innerHTML = `

@@ -1,5 +1,5 @@
-// ==== Lógica compartilhada: busca do CSV, parsing e agregação ====
-// Usado tanto por index.html quanto por categorias.html
+// ==== Lógica compartilhada: busca do CSV, parsing, agregação e filtros ====
+// Usado por index.html, categorias.html e comparativo.html
 
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTgaz_Xppuf6aUcKpMu30bln-5repgU5cGj7gkSc9UMI9Ru_nyJ_dVTpLPnsTqFNjAhQseBmrTCqJLO/pub?output=csv";
 const REFRESH_MS = 5 * 60 * 1000;
@@ -58,7 +58,54 @@ function parseFields(fields){
   return {questionFields, metaFields, categorySubtitles};
 }
 
-// Busca o CSV publicado, parseia e devolve todos os dados já agregados.
+// Calcula todos os agregados (médias, melhores/piores categoria, pergunta e
+// resposta) a partir de um conjunto de rowStats — pode ser o conjunto
+// completo ou um subconjunto já filtrado por avaliador/avaliado.
+function computeAggregates(rowStats, categories, questionFields){
+  const validOverall = rowStats.map(s=>s.overall).filter(v=>v!==null);
+  const overallAvg = validOverall.length ? validOverall.reduce((a,b)=>a+b,0)/validOverall.length : null;
+
+  const catOverallAvg = {};
+  categories.forEach(c => {
+    const vals = rowStats.map(s=>s.catAvg[c]).filter(v=>v!==null);
+    catOverallAvg[c] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+
+  const validCats = categories.filter(c => catOverallAvg[c] !== null);
+  const sortedCats = validCats.slice().sort((a,b)=>catOverallAvg[b]-catOverallAvg[a]);
+  const bestCat = sortedCats.length ? sortedCats[0] : null;
+  const worstCat = sortedCats.length ? sortedCats[sortedCats.length-1] : null;
+
+  let bestResponse = null, worstResponse = null;
+  rowStats.forEach(s => {
+    if(s.overall === null) return;
+    if(!bestResponse || s.overall > bestResponse.overall) bestResponse = s;
+    if(!worstResponse || s.overall < worstResponse.overall) worstResponse = s;
+  });
+
+  // Média de cada pergunta individual, considerando as respostas do conjunto.
+  const questionAvg = {};
+  questionFields.forEach(q => {
+    const vals = rowStats.map(s => parseFloat(s.row[q.field])).filter(v => !isNaN(v));
+    questionAvg[q.field] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+
+  let bestQuestion = null, worstQuestion = null;
+  questionFields.forEach(q => {
+    const avg = questionAvg[q.field];
+    if(avg === null) return;
+    if(!bestQuestion || avg > bestQuestion.avg) bestQuestion = {...q, avg};
+    if(!worstQuestion || avg < worstQuestion.avg) worstQuestion = {...q, avg};
+  });
+
+  return {
+    overallAvg, catOverallAvg, bestCat, worstCat,
+    bestResponse, worstResponse, questionAvg, bestQuestion, worstQuestion
+  };
+}
+
+// Busca o CSV publicado, parseia e devolve todos os dados já agregados
+// (agregados calculados sobre o conjunto completo de respostas).
 async function loadDashboardData(){
   if(typeof Papa === "undefined"){
     throw new Error("Biblioteca PapaParse não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
@@ -114,71 +161,101 @@ async function loadDashboardData(){
     };
   });
 
-  const validOverall = rowStats.map(s=>s.overall).filter(v=>v!==null);
-  const overallAvg = validOverall.length ? validOverall.reduce((a,b)=>a+b,0)/validOverall.length : null;
-
-  const catOverallAvg = {};
-  categories.forEach(c => {
-    const vals = rowStats.map(s=>s.catAvg[c]).filter(v=>v!==null);
-    catOverallAvg[c] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-  });
-
-  const sortedCats = categories.slice().sort((a,b)=>(catOverallAvg[b]??-1)-(catOverallAvg[a]??-1));
-  const bestCat = sortedCats.length ? sortedCats[0] : null;
-  const worstCat = sortedCats.length ? sortedCats[sortedCats.length-1] : null;
-
-  let bestResponse = null, worstResponse = null;
-  rowStats.forEach(s => {
-    if(s.overall === null) return;
-    if(!bestResponse || s.overall > bestResponse.overall) bestResponse = s;
-    if(!worstResponse || s.overall < worstResponse.overall) worstResponse = s;
-  });
-
-  // Média de cada pergunta individual, considerando todas as respostas.
-  const questionAvg = {};
-  questionFields.forEach(q => {
-    const vals = rows.map(r => parseFloat(r[q.field])).filter(v => !isNaN(v));
-    questionAvg[q.field] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-  });
-
-  let bestQuestion = null, worstQuestion = null;
-  questionFields.forEach(q => {
-    const avg = questionAvg[q.field];
-    if(avg === null) return;
-    if(!bestQuestion || avg > bestQuestion.avg) bestQuestion = {...q, avg};
-    if(!worstQuestion || avg < worstQuestion.avg) worstQuestion = {...q, avg};
-  });
+  const agg = computeAggregates(rowStats, categories, questionFields);
 
   return {
     rows, questionFields, metaFields, timestampField, textFields,
     respondentField, evaluatedField, evalTypeField,
     categories, categoryColorMap, categorySubtitles, rowStats,
-    overallAvg, catOverallAvg, bestCat, worstCat,
-    bestResponse, worstResponse, questionAvg, bestQuestion, worstQuestion
+    ...agg
   };
 }
 
-// Lista (ordenada) de nomes de colaboradores que aparecem nas respostas,
-// seja como autoavaliação ou como avaliado por um colega.
+// Lista (ordenada) de nomes que aparecem como avaliador (quem preencheu o formulário).
+function getRespondentNames(data){
+  const names = new Set();
+  data.rowStats.forEach(s => { if(s.respondentName) names.add(s.respondentName); });
+  return Array.from(names).sort((a,b)=>a.localeCompare(b,"pt-BR"));
+}
+
+// Lista (ordenada) de nomes de colaboradores que aparecem como avaliados,
+// seja por autoavaliação ou avaliados por um colega.
 function getSubjectNames(data){
   const names = new Set();
   data.rowStats.forEach(s => { if(s.subjectName) names.add(s.subjectName); });
   return Array.from(names).sort((a,b)=>a.localeCompare(b,"pt-BR"));
 }
 
-// Calcula, para um colaborador específico, a comparação entre a
-// autoavaliação dele e as avaliações recebidas de colegas — por categoria
-// e por pergunta.
-function computeComparison(data, subjectName){
-  const selfStats = data.rowStats.filter(s => s.isSelf && s.subjectName === subjectName);
-  const peerStats = data.rowStats.filter(s => !s.isSelf && s.subjectName === subjectName);
+// Filtra um conjunto de rowStats pelo avaliador e/ou avaliado escolhidos.
+// avaliador/avaliado vazios ("") significam "Todos".
+function filterRowStats(rowStats, avaliador, avaliado){
+  return rowStats.filter(s => {
+    if(avaliador && s.respondentName !== avaliador) return false;
+    if(avaliado && s.subjectName !== avaliado) return false;
+    return true;
+  });
+}
+
+// Preenche e liga a barra de filtro compartilhada (Avaliador / Avaliado),
+// restaura a última seleção salva e chama onChange(avaliador, avaliado)
+// sempre que os filtros mudam (inclusive uma vez no carregamento inicial).
+// Requer #filterAvaliador e #filterAvaliado no HTML da página.
+function initFilterBar(data, onChange){
+  const avaliadorSel = document.getElementById("filterAvaliador");
+  const avaliadoSel = document.getElementById("filterAvaliado");
+  if(!avaliadorSel || !avaliadoSel){
+    onChange("", "");
+    return;
+  }
+
+  const respondents = getRespondentNames(data);
+  const subjects = getSubjectNames(data);
+
+  avaliadorSel.innerHTML = '<option value="">Todos</option>' +
+    respondents.map(n => `<option value="${n}">${n}</option>`).join("");
+  avaliadoSel.innerHTML = '<option value="">Todos</option>' +
+    subjects.map(n => `<option value="${n}">${n}</option>`).join("");
+
+  let savedAvaliador = "", savedAvaliado = "";
+  try{
+    savedAvaliador = localStorage.getItem("filter_avaliador") || "";
+    savedAvaliado = localStorage.getItem("filter_avaliado") || "";
+  }catch(e){}
+  if(!respondents.includes(savedAvaliador)) savedAvaliador = "";
+  if(!subjects.includes(savedAvaliado)) savedAvaliado = "";
+
+  avaliadorSel.value = savedAvaliador;
+  avaliadoSel.value = savedAvaliado;
+
+  function trigger(){
+    const av = avaliadorSel.value;
+    const ad = avaliadoSel.value;
+    try{
+      localStorage.setItem("filter_avaliador", av);
+      localStorage.setItem("filter_avaliado", ad);
+    }catch(e){}
+    onChange(av, ad);
+  }
+
+  avaliadorSel.addEventListener("change", trigger);
+  avaliadoSel.addEventListener("change", trigger);
+
+  trigger();
+}
+
+// Compara autoavaliação (isSelf) vs avaliação de colegas dentro de um
+// conjunto de rowStats já filtrado (tipicamente pela barra de filtro,
+// com o avaliado escolhido — mas funciona igual sobre qualquer subconjunto).
+function computeComparison(rowStats, categories, questionFields){
+  const selfStats = rowStats.filter(s => s.isSelf);
+  const peerStats = rowStats.filter(s => !s.isSelf);
 
   function avgOf(list, getter){
     const vals = list.map(getter).filter(v => v !== null && v !== undefined && !isNaN(v));
     return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
   }
 
-  const categoryComparison = data.categories.map(cat => {
+  const categoryComparison = categories.map(cat => {
     const self = avgOf(selfStats, s => s.catAvg[cat]);
     const peer = avgOf(peerStats, s => s.catAvg[cat]);
     return {
@@ -188,7 +265,7 @@ function computeComparison(data, subjectName){
     };
   });
 
-  const questionComparison = data.questionFields.map(q => {
+  const questionComparison = questionFields.map(q => {
     const self = avgOf(selfStats, s => parseFloat(s.row[q.field]));
     const peer = avgOf(peerStats, s => parseFloat(s.row[q.field]));
     return {
@@ -199,7 +276,6 @@ function computeComparison(data, subjectName){
   });
 
   return {
-    subjectName,
     selfCount: selfStats.length,
     peerCount: peerStats.length,
     categoryComparison,
@@ -217,7 +293,7 @@ function gapClass(diff){
   return "score-text-red";
 }
 
-// Monta o HTML do modal de detalhe de uma resposta (usado nas duas páginas).
+// Monta o HTML do modal de detalhe de uma resposta (usado nas páginas com modal).
 function buildDetailHTML(stat, data){
   const {questionFields, categories, categorySubtitles, textFields, timestampField} = data;
   const row = stat.row;
@@ -280,7 +356,7 @@ function wrapLabel(text, maxLen){
   return lines;
 }
 
-// Liga os botões de fechar do modal (chamar uma vez em cada página).
+// Liga os botões de fechar do modal (chamar uma vez em cada página com modal).
 function wireModalClose(){
   const closeBtn = document.getElementById("closeModal");
   const overlay = document.getElementById("overlay");

@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comparativo — Avaliação de Colaboradores</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="data.js"></script>
+<script src="data.js?v=2"></script>
 </head>
 <body>
 
@@ -25,6 +25,19 @@
   </div>
 </header>
 
+<div class="filter-bar">
+  <div class="filter-bar-inner">
+    <div class="filter-field">
+      <label for="filterAvaliador">Avaliador</label>
+      <select id="filterAvaliador"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-field">
+      <label for="filterAvaliado">Avaliado</label>
+      <select id="filterAvaliado"><option value="">Todos</option></select>
+    </div>
+  </div>
+</div>
+
 <main id="main">
   <div class="loading" id="loadingMsg">Buscando respostas da planilha…</div>
 </main>
@@ -39,7 +52,6 @@ const SELF_COLOR = "#002D72";
 const PEER_COLOR = "#009933";
 let charts = {};
 let lastData = null;
-let currentSubject = null;
 
 async function loadData(){
   document.getElementById("loadingMsg").style.display = "block";
@@ -49,7 +61,18 @@ async function loadData(){
     }
     const data = await loadDashboardData();
     lastData = data;
-    initSubjectSelector(data);
+
+    if(getSubjectNames(data).length === 0){
+      document.getElementById("main").innerHTML =
+        '<div class="empty">Nenhuma resposta com identificação de colaborador foi encontrada ainda.<br>Confira se o formulário inclui as perguntas de nome e "Quem você vai avaliar?".</div>';
+    } else {
+      initFilterBar(data, (av, ad) => {
+        const filtered = filterRowStats(data.rowStats, av, ad);
+        const label = ad || "Todos os colaboradores";
+        renderComparison(data, filtered, label);
+      });
+    }
+
     document.getElementById("lastUpdated").textContent =
       "Última atualização: " + new Date().toLocaleString("pt-BR");
   }catch(err){
@@ -59,56 +82,23 @@ async function loadData(){
   }
 }
 
-function initSubjectSelector(data){
-  const names = getSubjectNames(data);
-  const main = document.getElementById("main");
-
-  if(names.length === 0){
-    main.innerHTML = '<div class="empty">Nenhuma resposta com identificação de colaborador foi encontrada ainda.<br>Confira se o formulário inclui as perguntas de nome e "Quem você vai avaliar?".</div>';
-    return;
-  }
-
-  let saved = null;
-  try{ saved = localStorage.getItem("comparativo_subject"); }catch(e){}
-  const initial = (saved && names.includes(saved)) ? saved : names[0];
-  currentSubject = initial;
-
-  main.innerHTML = `
-    <div class="selector-bar">
-      <label for="subjectSelect">Colaborador:</label>
-      <select id="subjectSelect">
-        ${names.map(n => `<option value="${n}" ${n===initial ? "selected" : ""}>${n}</option>`).join("")}
-      </select>
-    </div>
-    <div id="comparisonArea"></div>
-  `;
-
-  document.getElementById("subjectSelect").addEventListener("change", (e) => {
-    currentSubject = e.target.value;
-    try{ localStorage.setItem("comparativo_subject", currentSubject); }catch(err){}
-    renderComparison(data, currentSubject);
-  });
-
-  renderComparison(data, currentSubject);
-}
-
 function diffLabel(diff){
   if(diff === null || diff === undefined || isNaN(diff)) return "-";
   return (diff > 0 ? "+" : "") + fmt(diff);
 }
 
-function renderComparison(data, subjectName){
-  const comp = computeComparison(data, subjectName);
-  const area = document.getElementById("comparisonArea");
+function renderComparison(data, rowStats, subjectLabel){
+  const comp = computeComparison(rowStats, data.categories, data.questionFields);
+  const main = document.getElementById("main");
 
   if(comp.selfCount === 0 && comp.peerCount === 0){
-    area.innerHTML = '<div class="empty">Nenhuma resposta encontrada para este colaborador.</div>';
+    main.innerHTML = '<div class="empty">Nenhuma resposta encontrada para esse filtro.</div>';
     return;
   }
 
   const catHTML = `
     <div class="card">
-      <h2>${subjectName} — comparação por categoria</h2>
+      <h2>${subjectLabel} — comparação por categoria</h2>
       <div class="comparison-legend">
         <span><span class="legend-dot" style="background:${SELF_COLOR};"></span>Autoavaliação (${comp.selfCount} resposta${comp.selfCount===1?"":"s"})</span>
         <span><span class="legend-dot" style="background:${PEER_COLOR};"></span>Avaliação dos colegas (${comp.peerCount} resposta${comp.peerCount===1?"":"s"})</span>
@@ -159,7 +149,7 @@ function renderComparison(data, subjectName){
   `;
   }).join("");
 
-  area.innerHTML = catHTML + sectionsHTML;
+  main.innerHTML = catHTML + sectionsHTML;
 
   // gráfico comparativo por categoria
   if(charts.cat) charts.cat.destroy();
