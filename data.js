@@ -11,13 +11,45 @@ const CATEGORY_COLORS = ["#4C9AFF","#36B37E","#FFAB00","#6554C0","#FF5630","#00B
 // Converte um link de compartilhamento do OneDrive/SharePoint em uma URL de
 // download direto do conteúdo do arquivo, usando o endpoint público de
 // "shares" da API do OneDrive. Funciona sem autenticação para links do tipo
-// "qualquer pessoa com o link pode visualizar".
+// "qualquer pessoa com o link pode visualizar" — mas essa API legada às
+// vezes está bloqueada/depreciada dependendo do tipo de conta, por isso é
+// usada como uma das tentativas em fetchWorkbookBuffer(), não a única.
 function buildOneDriveDownloadUrl(shareUrl){
   const b64 = btoa(unescape(encodeURIComponent(shareUrl)))
     .replace(/=+$/, "")
     .replace(/\//g, "_")
     .replace(/\+/g, "-");
   return "https://api.onedrive.com/v1.0/shares/u!" + b64 + "/root/content";
+}
+
+// Busca os bytes do arquivo Excel a partir do link de compartilhamento,
+// tentando algumas variações conhecidas de "download direto" do OneDrive.
+// Se todas falharem, o erro final inclui o status HTTP e um trecho do corpo
+// da resposta de cada tentativa, para dar pistas concretas do que está
+// bloqueando o acesso (permissão do link, tipo de conta, CORS, etc.).
+async function fetchWorkbookBuffer(){
+  const directUrl = SOURCE_SHARE_URL + (SOURCE_SHARE_URL.includes("?") ? "&" : "?") + "download=1";
+  const apiUrl = buildOneDriveDownloadUrl(SOURCE_SHARE_URL);
+  const attempts = [
+    {label: "link direto (?download=1)", url: directUrl},
+    {label: "API do OneDrive (api.onedrive.com)", url: apiUrl}
+  ];
+
+  const failures = [];
+  for(const attempt of attempts){
+    try{
+      const res = await fetch(attempt.url, {cache:"no-store"});
+      if(res.ok){
+        return await res.arrayBuffer();
+      }
+      let detail = "";
+      try{ detail = (await res.text()).replace(/\s+/g, " ").trim().slice(0, 300); }catch(e){}
+      failures.push(attempt.label + ": HTTP " + res.status + (detail ? " — " + detail : ""));
+    }catch(e){
+      failures.push(attempt.label + ": " + e.message);
+    }
+  }
+  throw new Error("Não foi possível baixar a planilha do OneDrive. " + failures.join(" | "));
 }
 
 function scoreClass(v){
@@ -155,10 +187,7 @@ async function loadDashboardData(){
   if(typeof XLSX === "undefined"){
     throw new Error("Biblioteca de leitura de Excel não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
   }
-  const url = buildOneDriveDownloadUrl(SOURCE_SHARE_URL);
-  const res = await fetch(url, {cache:"no-store"});
-  if(!res.ok) throw new Error("HTTP " + res.status);
-  const buf = await res.arrayBuffer();
+  const buf = await fetchWorkbookBuffer();
   const wb = XLSX.read(buf, {type:"array"});
   const sheet = wb.Sheets[wb.SheetNames[0]];
 
