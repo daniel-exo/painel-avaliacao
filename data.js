@@ -1,9 +1,24 @@
-// ==== Lógica compartilhada: busca do CSV, parsing, agregação e filtros ====
+// ==== Lógica compartilhada: busca da planilha, parsing, agregação e filtros ====
 // Usado por index.html, categorias.html e comparativo.html
 
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTgaz_Xppuf6aUcKpMu30bln-5repgU5cGj7gkSc9UMI9Ru_nyJ_dVTpLPnsTqFNjAhQseBmrTCqJLO/pub?output=csv";
+// Link de compartilhamento do Excel no OneDrive (planilha vinculada às
+// respostas do Microsoft Forms, gerada em "Respostas" > "Abrir no Excel").
+// Precisa estar configurado como "Qualquer pessoa com o link pode visualizar".
+const SOURCE_SHARE_URL = "https://1drv.ms/x/c/9c334bf5018ccd89/IQBlOyuz6sbzT74BbnkM3bH5AZbqOg133Xo85dz7C-4JFT8?e=oM83gZ";
 const REFRESH_MS = 5 * 60 * 1000;
 const CATEGORY_COLORS = ["#4C9AFF","#36B37E","#FFAB00","#6554C0","#FF5630","#00B8D9","#B0BEC5"];
+
+// Converte um link de compartilhamento do OneDrive/SharePoint em uma URL de
+// download direto do conteúdo do arquivo, usando o endpoint público de
+// "shares" da API do OneDrive. Funciona sem autenticação para links do tipo
+// "qualquer pessoa com o link pode visualizar".
+function buildOneDriveDownloadUrl(shareUrl){
+  const b64 = btoa(unescape(encodeURIComponent(shareUrl)))
+    .replace(/=+$/, "")
+    .replace(/\//g, "_")
+    .replace(/\+/g, "-");
+  return "https://api.onedrive.com/v1.0/shares/u!" + b64 + "/root/content";
+}
 
 function scoreClass(v){
   if(v === null || v === undefined || isNaN(v)) return "";
@@ -26,10 +41,24 @@ function fmt(v){
   return (Math.round(v*100)/100).toFixed(2);
 }
 
-// Um cabeçalho de pergunta vem no formato:
-// "CATEGORIA\nFrase de valor da categoria. [Pergunta específica sobre o colaborador.]"
-// Separamos a categoria, a frase de valor (usada como subtítulo da categoria)
-// e a pergunta em si (sem colchetes), para não repetir a frase de valor em cada linha.
+// Um cabeçalho de pergunta pode vir em dois formatos, dependendo de onde o
+// formulário foi criado:
+//
+// Google Forms (formato antigo):
+//   "CATEGORIA\nFrase de valor da categoria. [Pergunta específica.]"
+//   → categoria = 1ª linha; frase de valor = subtítulo; pergunta = texto entre colchetes.
+//
+// Microsoft Forms (formato novo):
+//   "Frase de valor da categoria (com a CATEGORIA em maiúsculas).\n.Pergunta específica."
+//   → categoria = palavra(s) em maiúsculas dentro da 1ª linha; frase de valor
+//     completa = subtítulo; pergunta = 2ª linha, sem o ponto inicial.
+//
+// Em ambos os casos separamos a categoria, a frase de valor (usada como
+// subtítulo da categoria) e a pergunta em si, para não repetir a frase de
+// valor em cada linha. Perguntas de identificação do Microsoft Forms (ex.:
+// "Quem você vai avaliar?") também trazem uma quebra de linha sobrando no
+// final do cabeçalho, mesmo sem serem perguntas de categoria — tratamos esse
+// caso como campo comum (metaField), não como pergunta.
 function parseFields(fields){
   const questionFields = [];
   const metaFields = [];
@@ -37,18 +66,33 @@ function parseFields(fields){
   fields.forEach(f => {
     if(f.includes("\n")){
       const idx = f.indexOf("\n");
-      const category = f.slice(0, idx).trim();
-      const remainder = f.slice(idx+1).trim();
-      const openIdx = remainder.indexOf("[");
-      const closeIdx = remainder.lastIndexOf("]");
-      let question, subtitle;
-      if(openIdx !== -1 && closeIdx > openIdx){
-        subtitle = remainder.slice(0, openIdx).trim();
-        question = remainder.slice(openIdx+1, closeIdx).trim();
-      } else {
-        subtitle = null;
-        question = remainder;
+      const line1 = f.slice(0, idx).trim();
+      const line2 = f.slice(idx+1).trim();
+
+      // Quebra de linha sobrando num campo de identificação (Microsoft Forms) —
+      // não é uma pergunta de categoria, então tratamos como campo comum.
+      if(line2 === ""){
+        if(line1) metaFields.push(f);
+        return;
       }
+
+      let category, subtitle, question;
+      if(line2.includes("[") && line2.lastIndexOf("]") > line2.indexOf("[")){
+        // Formato Google Forms
+        category = line1;
+        const openIdx = line2.indexOf("[");
+        const closeIdx = line2.lastIndexOf("]");
+        subtitle = line2.slice(0, openIdx).trim();
+        question = line2.slice(openIdx+1, closeIdx).trim();
+      } else {
+        // Formato Microsoft Forms
+        subtitle = line1;
+        const capMatch = line1.match(/\p{Lu}[\p{Lu}À-Þ]{2,}/gu);
+        const rawCategory = capMatch ? capMatch.join(" ") : line1;
+        category = rawCategory.charAt(0) + rawCategory.slice(1).toLowerCase();
+        question = line2.replace(/^\.+\s*/, "").trim();
+      }
+
       if(subtitle && !categorySubtitles[category]) categorySubtitles[category] = subtitle;
       questionFields.push({field:f, category, question});
     } else if(f && f.trim() !== ""){
@@ -104,22 +148,36 @@ function computeAggregates(rowStats, categories, questionFields){
   };
 }
 
-// Busca o CSV publicado, parseia e devolve todos os dados já agregados
-// (agregados calculados sobre o conjunto completo de respostas).
+// Busca a planilha do Excel (OneDrive) vinculada às respostas do Microsoft
+// Forms, parseia e devolve todos os dados já agregados (agregados calculados
+// sobre o conjunto completo de respostas).
 async function loadDashboardData(){
-  if(typeof Papa === "undefined"){
-    throw new Error("Biblioteca PapaParse não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
+  if(typeof XLSX === "undefined"){
+    throw new Error("Biblioteca de leitura de Excel não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
   }
-  const url = CSV_URL + (CSV_URL.includes("?") ? "&" : "?") + "_ts=" + Date.now();
+  const url = buildOneDriveDownloadUrl(SOURCE_SHARE_URL);
   const res = await fetch(url, {cache:"no-store"});
   if(!res.ok) throw new Error("HTTP " + res.status);
-  const text = await res.text();
-  const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+  const buf = await res.arrayBuffer();
+  const wb = XLSX.read(buf, {type:"array"});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
 
-  const rows = parsed.data.filter(r => Object.values(r).some(v => v && String(v).trim() !== ""));
-  const {questionFields, metaFields, categorySubtitles} = parseFields(parsed.meta.fields);
-  const timestampField = metaFields[0];
-  const metaRest = metaFields.slice(1);
+  const headerRow = (XLSX.utils.sheet_to_json(sheet, {header:1, blankrows:false})[0] || [])
+    .map(h => String(h == null ? "" : h));
+  const allRows = XLSX.utils.sheet_to_json(sheet, {defval:""});
+
+  const rows = allRows.filter(r => Object.values(r).some(v => v && String(v).trim() !== ""));
+  const {questionFields, metaFields, categorySubtitles} = parseFields(headerRow);
+
+  // Colunas de sistema do Microsoft Forms (Id, Hora de início, Email, Nome)
+  // que não existiam no Google Forms — não usamos como campo de texto nem
+  // como timestamp principal (usamos "Hora de conclusão" para isso).
+  const SYSTEM_FIELD_PATTERNS = [/^id$/i, /^hora de in[ií]cio$/i, /^email$/i, /^nome$/i];
+  const timestampField =
+    metaFields.find(f => /hora de conclus/i.test(f)) ||
+    metaFields.find(f => /carimbo de data/i.test(f)) ||
+    metaFields[0];
+  const metaRest = metaFields.filter(f => f !== timestampField && !SYSTEM_FIELD_PATTERNS.some(re => re.test(f.trim())));
 
   // Campos de identificação (adicionados quando o formulário passou a
   // diferenciar autoavaliação de avaliação de colaborador).
