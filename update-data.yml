@@ -1,0 +1,33 @@
+name: Atualizar dados da pesquisa
+
+# Disparado externamente pelo Power Automate via "repository_dispatch"
+# (ação "Criar um evento de expedição de repositório" no conector do GitHub).
+on:
+  repository_dispatch:
+    types: [update-data]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Salvar payload recebido em responses.json
+        env:
+          PAYLOAD: ${{ toJson(github.event.client_payload) }}
+        run: echo "$PAYLOAD" > responses.json
+
+      - name: Commit e push (só se algo mudou)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add responses.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Atualização automática de respostas"
+            git push
+          else
+            echo "Nada mudou, pulando commit."
+          fi
