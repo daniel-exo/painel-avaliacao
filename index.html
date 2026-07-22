@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="styles.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="data.js?v=4"></script>
+<script src="data.js?v=5"></script>
 </head>
 <body>
 
@@ -44,7 +44,7 @@
 
 <footer>
   <img class="footer-logo" src="exo-logo.png" alt="EXO">
-  <div>Dados carregados diretamente do Google Sheets publicado. Atualiza automaticamente a cada 5 minutos.</div>
+  <div>Dados carregados diretamente das respostas do Microsoft Forms. Atualiza automaticamente a cada 5 minutos.</div>
 </footer>
 
 <div class="overlay" id="overlay">
@@ -74,7 +74,7 @@ async function loadData(){
       "Última atualização: " + new Date().toLocaleString("pt-BR");
   }catch(err){
     document.getElementById("main").innerHTML =
-      '<div class="empty">Não foi possível carregar os dados agora.<br><strong>Detalhes:</strong> ' + err.message + '<br>Verifique se o link da planilha no OneDrive ainda está compartilhado como "qualquer pessoa com o link pode visualizar".</div>';
+      '<div class="empty">Não foi possível carregar os dados agora.<br><strong>Detalhes:</strong> ' + err.message + '<br>Verifique se o arquivo responses.json existe no repositório e se o fluxo automático (Power Automate + GitHub Actions) rodou com sucesso.</div>';
     console.error(err);
   }
 }

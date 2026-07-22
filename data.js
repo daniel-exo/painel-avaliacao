@@ -1,55 +1,36 @@
 // ==== Lógica compartilhada: busca da planilha, parsing, agregação e filtros ====
 // Usado por index.html, categorias.html e comparativo.html
 
-// Link de compartilhamento do Excel no OneDrive (planilha vinculada às
-// respostas do Microsoft Forms, gerada em "Respostas" > "Abrir no Excel").
-// Precisa estar configurado como "Qualquer pessoa com o link pode visualizar".
-const SOURCE_SHARE_URL = "https://1drv.ms/x/c/9c334bf5018ccd89/IQBlOyuz6sbzT74BbnkM3bH5AZbqOg133Xo85dz7C-4JFT8?e=oM83gZ";
+// responses.json é gerado automaticamente por um fluxo do Power Automate
+// (lê a tabela do Excel vinculada ao Microsoft Forms) + um GitHub Actions
+// workflow (.github/workflows/update-data.yml) que recebe esse aviso via
+// repository_dispatch e commita o arquivo no repositório. Como o arquivo
+// vive no mesmo repositório/domínio do site (GitHub Pages), a busca é
+// same-origin — sem CORS, sem autenticação, sem depender do OneDrive.
+const RESPONSES_JSON_URL = "responses.json";
 const REFRESH_MS = 5 * 60 * 1000;
 const CATEGORY_COLORS = ["#4C9AFF","#36B37E","#FFAB00","#6554C0","#FF5630","#00B8D9","#B0BEC5"];
 
-// Converte um link de compartilhamento do OneDrive/SharePoint em uma URL de
-// download direto do conteúdo do arquivo, usando o endpoint público de
-// "shares" da API do OneDrive. Funciona sem autenticação para links do tipo
-// "qualquer pessoa com o link pode visualizar" — mas essa API legada às
-// vezes está bloqueada/depreciada dependendo do tipo de conta, por isso é
-// usada como uma das tentativas em fetchWorkbookBuffer(), não a única.
-function buildOneDriveDownloadUrl(shareUrl){
-  const b64 = btoa(unescape(encodeURIComponent(shareUrl)))
-    .replace(/=+$/, "")
-    .replace(/\//g, "_")
-    .replace(/\+/g, "-");
-  return "https://api.onedrive.com/v1.0/shares/u!" + b64 + "/root/content";
+// O conector do Excel Online usado pelo Power Automate devolve os nomes das
+// colunas no padrão de "escape" do OData: qualquer caractere fora do
+// permitido em identificadores vira "_xHHHH_" (código hexadecimal Unicode).
+// Isso afeta principalmente o ponto final (".") nos cabeçalhos das perguntas.
+// Revertendo esse escape, os cabeçalhos voltam a ficar idênticos ao que o
+// parseFields já sabe interpretar.
+function unescapeODataKey(s){
+  return String(s).replace(/_x([0-9A-Fa-f]{4})_/g, (m, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
-// Busca os bytes do arquivo Excel a partir do link de compartilhamento,
-// tentando algumas variações conhecidas de "download direto" do OneDrive.
-// Se todas falharem, o erro final inclui o status HTTP e um trecho do corpo
-// da resposta de cada tentativa, para dar pistas concretas do que está
-// bloqueando o acesso (permissão do link, tipo de conta, CORS, etc.).
-async function fetchWorkbookBuffer(){
-  const directUrl = SOURCE_SHARE_URL + (SOURCE_SHARE_URL.includes("?") ? "&" : "?") + "download=1";
-  const apiUrl = buildOneDriveDownloadUrl(SOURCE_SHARE_URL);
-  const attempts = [
-    {label: "link direto (?download=1)", url: directUrl},
-    {label: "API do OneDrive (api.onedrive.com)", url: apiUrl}
-  ];
-
-  const failures = [];
-  for(const attempt of attempts){
-    try{
-      const res = await fetch(attempt.url, {cache:"no-store"});
-      if(res.ok){
-        return await res.arrayBuffer();
-      }
-      let detail = "";
-      try{ detail = (await res.text()).replace(/\s+/g, " ").trim().slice(0, 300); }catch(e){}
-      failures.push(attempt.label + ": HTTP " + res.status + (detail ? " — " + detail : ""));
-    }catch(e){
-      failures.push(attempt.label + ": " + e.message);
-    }
-  }
-  throw new Error("Não foi possível baixar a planilha do OneDrive. " + failures.join(" | "));
+// O Excel guarda datas como número de série (dias desde 1899-12-30) — o
+// conector do Power Automate devolve esse número cru, em vez de um texto
+// formatado. Convertendo para "DD/MM/AAAA HH:MM" para exibição.
+function excelSerialToDateStr(serial){
+  const n = parseFloat(serial);
+  if(isNaN(n)) return serial;
+  const ms = Math.round((n - 25569) * 86400 * 1000);
+  const d = new Date(ms);
+  const pad = x => String(x).padStart(2, "0");
+  return pad(d.getUTCDate()) + "/" + pad(d.getUTCMonth()+1) + "/" + d.getUTCFullYear() + " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
 }
 
 function scoreClass(v){
@@ -180,22 +161,31 @@ function computeAggregates(rowStats, categories, questionFields){
   };
 }
 
-// Busca a planilha do Excel (OneDrive) vinculada às respostas do Microsoft
-// Forms, parseia e devolve todos os dados já agregados (agregados calculados
-// sobre o conjunto completo de respostas).
+// Busca o responses.json (publicado pelo pipeline Power Automate + GitHub
+// Actions), parseia e devolve todos os dados já agregados (agregados
+// calculados sobre o conjunto completo de respostas).
 async function loadDashboardData(){
-  if(typeof XLSX === "undefined"){
-    throw new Error("Biblioteca de leitura de Excel não carregou. Verifique bloqueador de anúncios, firewall ou extensão de privacidade que possa estar bloqueando cdn.jsdelivr.net.");
-  }
-  const buf = await fetchWorkbookBuffer();
-  const wb = XLSX.read(buf, {type:"array"});
-  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const url = RESPONSES_JSON_URL + (RESPONSES_JSON_URL.includes("?") ? "&" : "?") + "_ts=" + Date.now();
+  const res = await fetch(url, {cache:"no-store"});
+  if(!res.ok) throw new Error("HTTP " + res.status + " ao buscar responses.json");
+  const json = await res.json();
+  const rawRows = Array.isArray(json.rows) ? json.rows : [];
 
-  const headerRow = (XLSX.utils.sheet_to_json(sheet, {header:1, blankrows:false})[0] || [])
-    .map(h => String(h == null ? "" : h));
-  const allRows = XLSX.utils.sheet_to_json(sheet, {defval:""});
+  // Colunas técnicas adicionadas pelo conector do Power Automate (não fazem
+  // parte do formulário original) e chaves com escape OData (ex.: "." vira
+  // "_x002e_") — normalizamos antes de qualquer outra coisa.
+  const IGNORED_KEYS = new Set(["@odata.etag", "iteminternalid"]);
+  const allRows = rawRows.map(r => {
+    const clean = {};
+    Object.keys(r).forEach(k => {
+      if(IGNORED_KEYS.has(k.toLowerCase())) return;
+      clean[unescapeODataKey(k)] = r[k];
+    });
+    return clean;
+  });
 
   const rows = allRows.filter(r => Object.values(r).some(v => v && String(v).trim() !== ""));
+  const headerRow = Object.keys(rows.length ? rows[0] : (allRows[0] || {}));
   const {questionFields, metaFields, categorySubtitles} = parseFields(headerRow);
 
   // Colunas de sistema do Microsoft Forms (Id, Hora de início, Email, Nome)
@@ -206,6 +196,11 @@ async function loadDashboardData(){
     metaFields.find(f => /hora de conclus/i.test(f)) ||
     metaFields.find(f => /carimbo de data/i.test(f)) ||
     metaFields[0];
+
+  // Datas do Excel vêm como número de série — convertemos para texto legível.
+  if(timestampField){
+    rows.forEach(r => { r[timestampField] = excelSerialToDateStr(r[timestampField]); });
+  }
   const metaRest = metaFields.filter(f => f !== timestampField && !SYSTEM_FIELD_PATTERNS.some(re => re.test(f.trim())));
 
   // Campos de identificação (adicionados quando o formulário passou a
