@@ -1,13 +1,30 @@
 name: Atualizar dados da pesquisa
 
-# Disparado externamente pelo Power Automate via "repository_dispatch"
-# (ação "Criar um evento de expedição de repositório" no conector do GitHub).
+# Disparado pelo Power Automate via "repository_dispatch" (ação "Criar um evento
+# de expedição de repositório" do conector do GitHub).
+#
+# O fluxo envia a saída da ação "Criar tabela CSV":
+#     { "csv": "<conteúdo CSV>" }
+#
+# Antes ele mandava as linhas cruas ({"rows":[{...}]}), repetindo os ~40 títulos
+# de pergunta em cada linha: 5 KB por resposta, teto de ~12 respostas. A partir
+# daí o GitHub recusava com 422 "client_payload is too large" e o painel ficava
+# congelado sem nenhum alarme. O CSV manda cada título uma vez só.
+#
+# Toda a validação vive em build-responses.js, que ABORTA (em vez de gravar um
+# arquivo ruim) se o payload vier vazio, com menos respostas do que o arquivo
+# atual, com linhas de largura errada ou com notas fora da escala 1..5.
 on:
   repository_dispatch:
     types: [update-data]
+  workflow_dispatch:        # permite rodar à mão para testar
 
 permissions:
   contents: write
+
+concurrency:                # evita dois pushes simultâneos brigando
+  group: update-data
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -15,19 +32,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Salvar payload recebido em responses.json
+      - name: Montar responses.json
         env:
           PAYLOAD: ${{ toJson(github.event.client_payload) }}
-        run: echo "$PAYLOAD" > responses.json
+        run: |
+          printf '%s' "$PAYLOAD" > /tmp/payload.json
+          node build-responses.js /tmp/payload.json responses.json schema.json
 
-      - name: Commit e push (só se algo mudou)
+      - name: Commit e push (só se o conteúdo mudou)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add responses.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Atualização automática de respostas"
-            git push
-          else
+
+          if git diff --quiet -- responses.json; then
             echo "Nada mudou, pulando commit."
+            exit 0
           fi
+
+          # generatedAt muda a cada execução. Se for a ÚNICA diferença, não
+          # commita — senão o repositório ganharia um commit a cada disparo.
+          if [ "$(git diff -U0 -- responses.json | grep -c '^[+-][^+-]')" = "2" ] \
+             && [ "$(git diff -U0 -- responses.json | grep -c '"generatedAt"')" = "2" ]; then
+            echo "Só o carimbo de tempo mudou, pulando commit."
+            git checkout -- responses.json
+            exit 0
+          fi
+
+          git add responses.json
+          git commit -m "Atualização automática de respostas"
+          git push
