@@ -21,6 +21,59 @@ function unescapeODataKey(s){
   return String(s).replace(/_x([0-9A-Fa-f]{4})_/g, (m, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
+// ---- Normalização de nomes -------------------------------------------------
+// Os nomes são digitados à mão por cada respondente, então a mesma pessoa
+// aparece como "RILDO JOSE DE AZEVEDO", "Rildo Jose de Azevedo" e
+// "Rildo  Jose de Azevedo ". Sem normalizar, o painel trata cada variação como
+// uma pessoa diferente e o comparativo autoavaliação × gestor não fecha.
+// A chave ignora acentuação, caixa, espaços extras e o espaço não separável
+// ( ) que o Microsoft Forms às vezes injeta.
+function nameKey(s){
+  return String(s || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[\s ]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+const NAME_PARTICLES = new Set(["de","da","do","das","dos","e","del","di","van","von"]);
+
+function titleCaseName(s){
+  return s.split(" ").map((w, i) => {
+    const low = w.toLowerCase();
+    if(i > 0 && NAME_PARTICLES.has(low)) return low;
+    return low.charAt(0).toUpperCase() + low.slice(1);
+  }).join(" ");
+}
+
+// Constrói o mapa chave→nome de exibição. Entre as variações da mesma pessoa,
+// prefere a que tem mais letras minúsculas e mais acentos (ou seja, a digitada
+// com capitalização normal em vez de tudo em caixa alta). Se todas vierem em
+// caixa alta, aplica capitalização de nome próprio.
+function buildNameMap(rows, fields){
+  const groups = {};
+  rows.forEach(r => fields.forEach(f => {
+    if(!f) return;
+    const raw = String(r[f] || "").replace(/[\s ]+/g, " ").trim();
+    if(!raw) return;
+    const k = nameKey(raw);
+    (groups[k] = groups[k] || []).push(raw);
+  }));
+
+  const map = {};
+  Object.keys(groups).forEach(k => {
+    let best = null, bestScore = -1;
+    groups[k].forEach(v => {
+      const lower = (v.match(/[a-zà-ÿ]/g) || []).length;
+      const accents = (v.normalize("NFD").match(/[̀-ͯ]/g) || []).length;
+      const score = lower * 10 + accents;
+      if(score > bestScore){ bestScore = score; best = v; }
+    });
+    map[k] = /[a-zà-ÿ]/.test(best) ? best : titleCaseName(best);
+  });
+  return map;
+}
+
 // O Excel guarda datas como número de série (dias desde 1899-12-30) — o
 // conector do Power Automate devolve esse número cru, em vez de um texto
 // formatado. Convertendo para "DD/MM/AAAA HH:MM" para exibição.
@@ -169,7 +222,22 @@ async function loadDashboardData(){
   const res = await fetch(url, {cache:"no-store"});
   if(!res.ok) throw new Error("HTTP " + res.status + " ao buscar responses.json");
   const json = await res.json();
-  const rawRows = Array.isArray(json.rows) ? json.rows : [];
+
+  // Dois formatos aceitos:
+  //  1) {"rows":[{cabeçalho: valor, ...}, ...]}          — formato original
+  //  2) {"h":[cabeçalhos], "r":[[valores], [valores]]}   — formato compacto,
+  //     usado para caber no limite de tamanho do client_payload do
+  //     repository_dispatch (o formato 1 estourava ~64 KB na 11ª resposta).
+  let rawRows;
+  if(Array.isArray(json.h) && Array.isArray(json.r)){
+    rawRows = json.r.map(vals => {
+      const o = {};
+      json.h.forEach((h, i) => { o[h] = vals[i]; });
+      return o;
+    });
+  } else {
+    rawRows = Array.isArray(json.rows) ? json.rows : [];
+  }
 
   // Colunas técnicas adicionadas pelo conector do Power Automate (não fazem
   // parte do formulário original) e chaves com escape OData (ex.: "." vira
@@ -207,13 +275,31 @@ async function loadDashboardData(){
   // diferenciar autoavaliação de avaliação de colaborador).
   const respondentField = metaRest.find(f => /seu nome completo/i.test(f)) || null;
   const evaluatedField = metaRest.find(f => /nome completo da pessoa avaliada/i.test(f)) || null;
-  const evalTypeField = metaRest.find(f => /quem.*voc[eê].*avaliar/i.test(f)) || null;
+
+  // O campo que diz se a resposta é autoavaliação ou avaliação do gestor já
+  // mudou de nome uma vez no formulário ("Quem você vai avaliar?" virou
+  // "Avaliador:"). Aceitamos os dois — e qualquer coluna cujos valores sejam
+  // reconhecidamente do tipo (Autoavaliação/Gestor) — para que uma renomeação
+  // no Forms não volte a quebrar o comparativo em silêncio.
+  const evalTypeField =
+    metaRest.find(f => /quem.*voc[eê].*avaliar/i.test(f)) ||
+    metaRest.find(f => /^avaliador\s*:?\s*$/i.test(f.trim())) ||
+    metaRest.find(f => /tipo de avalia/i.test(f)) ||
+    metaRest.find(f => rows.some(r => /^(autoavalia|gestor|l[ií]der|par|colega)/i.test(String(r[f] || "").trim()))) ||
+    null;
   const textFields = metaRest.filter(f => f !== respondentField && f !== evaluatedField && f !== evalTypeField);
 
   const categories = [];
   questionFields.forEach(q => { if(!categories.includes(q.category)) categories.push(q.category); });
   const categoryColorMap = {};
   categories.forEach((c,i) => categoryColorMap[c] = CATEGORY_COLORS[i % CATEGORY_COLORS.length]);
+
+  const nameMap = buildNameMap(rows, [respondentField, evaluatedField]);
+  const canon = v => {
+    const raw = String(v || "").replace(/[\s ]+/g, " ").trim();
+    if(!raw) return "";
+    return nameMap[nameKey(raw)] || raw;
+  };
 
   const rowStats = rows.map((r, i) => {
     const catScores = {};
@@ -233,8 +319,8 @@ async function loadDashboardData(){
 
     const evalType = evalTypeField ? String(r[evalTypeField] || "").trim() : "";
     const isSelf = /auto/i.test(evalType);
-    const respondentName = respondentField ? String(r[respondentField] || "").trim() : "";
-    const evaluatedName = evaluatedField ? String(r[evaluatedField] || "").trim() : "";
+    const respondentName = respondentField ? canon(r[respondentField]) : "";
+    const evaluatedName = evaluatedField ? canon(r[evaluatedField]) : "";
     const subjectName = isSelf ? respondentName : (evaluatedName || respondentName);
 
     return {
@@ -249,8 +335,53 @@ async function loadDashboardData(){
     rows, questionFields, metaFields, timestampField, textFields,
     respondentField, evaluatedField, evalTypeField,
     categories, categoryColorMap, categorySubtitles, rowStats,
+    generatedAt: json.generatedAt || null,
+    sourceUpdatedAt: json.sourceUpdatedAt || null,
     ...agg
   };
+}
+
+// ---- Frescor do dado -------------------------------------------------------
+// O painel exibia "Última atualização: <agora>", que é a hora em que a PÁGINA
+// buscou o arquivo — não a hora do dado. Quando a esteira parou, a tela
+// continuou parecendo viva por semanas. Agora mostramos a data da resposta
+// mais recente e destacamos em vermelho se a carga estiver velha.
+const STALE_HOURS = 24;
+
+// Dois carimbos com papéis diferentes, e não dá para confundi-los:
+//   sourceUpdatedAt = data da resposta mais recente. É informação. Uma pesquisa
+//                     encerrada tem esse valor antigo e isso está CERTO.
+//   generatedAt     = quando a esteira gravou o arquivo pela última vez. É o
+//                     sinal de vida. Se ele envelhecer, a automação morreu —
+//                     e é isso que precisa gritar na tela.
+function renderFreshness(data, elId){
+  const el = document.getElementById(elId || "lastUpdated");
+  if(!el) return;
+
+  const fmtDate = iso => new Date(iso).toLocaleString("pt-BR",
+    {day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"});
+
+  const n = data && data.rowStats ? data.rowStats.length : 0;
+  let texto = `${n} resposta${n === 1 ? "" : "s"}`;
+  if(data && data.sourceUpdatedAt) texto += ` — última em ${fmtDate(data.sourceUpdatedAt)}`;
+
+  // Sem generatedAt (arquivo no formato antigo) não há como saber se a esteira
+  // está viva. Dizemos isso em vez de fingir que está tudo bem.
+  if(!data || !data.generatedAt){
+    el.textContent = texto + " — carga sem carimbo de origem";
+    el.classList.remove("stale");
+    return;
+  }
+
+  const ageH = (Date.now() - new Date(data.generatedAt).getTime()) / 3600000;
+  if(ageH > STALE_HOURS){
+    const dias = Math.floor(ageH / 24);
+    el.textContent = `${texto} — ATENÇÃO: a carga automática não roda há ${dias} dia${dias === 1 ? "" : "s"}`;
+    el.classList.add("stale");
+  } else {
+    el.textContent = `${texto} — carga automática OK (${fmtDate(data.generatedAt)})`;
+    el.classList.remove("stale");
+  }
 }
 
 // Lista (ordenada) de nomes que aparecem como avaliador (quem preencheu o formulário).
@@ -319,8 +450,12 @@ function initFilterBar(data, onChange){
     onChange(av, ad);
   }
 
-  avaliadorSel.addEventListener("change", trigger);
-  avaliadoSel.addEventListener("change", trigger);
+  // Atribuição direta (e não addEventListener): initFilterBar é chamada de novo
+  // a cada recarga automática, e com addEventListener os handlers iam se
+  // acumulando — depois de um dia aberto, cada mudança de filtro disparava
+  // centenas de renderizações.
+  avaliadorSel.onchange = trigger;
+  avaliadoSel.onchange = trigger;
 
   trigger();
 }

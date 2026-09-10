@@ -28,6 +28,13 @@ header{
 }
 header h1{margin:0;font-size:1.3rem;}
 header .meta{font-size:.8rem;color:var(--muted);}
+/* Aviso de dado velho: se a carga automática parar, isso fica visível na
+   primeira olhada, em vez de o painel parecer atualizado indefinidamente. */
+header .meta.stale{
+  color:#fff;background:var(--red);
+  font-weight:600;border-radius:4px;
+  padding:2px 8px;display:inline-block;margin-top:2px;
+}
 .btn{
   background:var(--accent);
   border:none;

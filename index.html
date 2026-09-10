@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Avaliação de Colaboradores</title>
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="data.js?v=5"></script>
+<script src="data.js?v=6"></script>
 </head>
 <body>
 
@@ -70,8 +70,7 @@ async function loadData(){
       const filtered = filterRowStats(data.rowStats, av, ad);
       render(data, filtered);
     });
-    document.getElementById("lastUpdated").textContent =
-      "Última atualização: " + new Date().toLocaleString("pt-BR");
+    renderFreshness(data);
   }catch(err){
     document.getElementById("main").innerHTML =
       '<div class="empty">Não foi possível carregar os dados agora.<br><strong>Detalhes:</strong> ' + err.message + '<br>Verifique se o arquivo responses.json existe no repositório e se o fluxo automático (Power Automate + GitHub Actions) rodou com sucesso.</div>';
