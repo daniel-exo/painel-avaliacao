@@ -196,10 +196,15 @@ if (errado.length)
 
 const nQ = validate(headers, values);
 
-let anterior = 0;
-try { anterior = (JSON.parse(fs.readFileSync(outPath, "utf8")).rows || []).length; } catch (e) {}
-if (anterior && values.length < anterior)
-  die(`Regressão: chegaram ${values.length} respostas, mas o arquivo atual tem ${anterior}. Abortando.`);
+let anteriorRows = null, anteriorGeneratedAt = null;
+try {
+  const old = JSON.parse(fs.readFileSync(outPath, "utf8"));
+  anteriorRows = old.rows || [];
+  anteriorGeneratedAt = old.generatedAt || null;
+} catch (e) {}
+
+if (anteriorRows && anteriorRows.length && values.length < anteriorRows.length)
+  die(`Regressão: chegaram ${values.length} respostas, mas o arquivo atual tem ${anteriorRows.length}. Abortando.`);
 
 /* ---------- Escrita -------------------------------------------------------- */
 const rows = values.map(v => {
@@ -219,8 +224,34 @@ if (colData) {
   else warn(`Coluna "${colData}" não trouxe números de série — a data do dado ficará em branco.`);
 }
 
+// O carimbo de vida da esteira, com uma sutileza que quase virou um bug:
+// se gravássemos generatedAt novo a cada execução, o repositório ganharia um
+// commit a cada 30 minutos para sempre. Mas se NUNCA regravássemos quando nada
+// muda, o carimbo congelaria — e passadas 24h o painel acusaria "esteira
+// parada" com a esteira viva, que é exatamente o alarme falso que destrói a
+// confiança no alarme. Solução: quando não há resposta nova, mantemos o
+// carimbo (arquivo idêntico, sem commit) até ele completar HEARTBEAT_H horas;
+// aí sim renovamos, gerando no máximo dois commits por dia em período parado.
+const HEARTBEAT_H = 12;
+
+const semNovidade = anteriorRows && JSON.stringify(anteriorRows) === JSON.stringify(rows);
+const idadeCarimbo = anteriorGeneratedAt
+  ? (Date.now() - new Date(anteriorGeneratedAt).getTime()) / 3600000
+  : Infinity;
+
+let generatedAt;
+if (semNovidade && idadeCarimbo < HEARTBEAT_H) {
+  generatedAt = anteriorGeneratedAt;
+  console.log(`Sem respostas novas e carimbo com ${idadeCarimbo.toFixed(1)}h — arquivo inalterado, nada a commitar.`);
+} else if (semNovidade) {
+  generatedAt = new Date().toISOString();
+  console.log("Sem respostas novas; renovando o carimbo de vida da esteira.");
+} else {
+  generatedAt = new Date().toISOString();
+}
+
 fs.writeFileSync(outPath, JSON.stringify({
-  generatedAt: new Date().toISOString(),
+  generatedAt,
   sourceUpdatedAt,
   count: rows.length,
   rows
