@@ -44,17 +44,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # build-responses.js já preserva o generatedAt quando não há resposta
+          # nova (e só o renova de 12 em 12 horas), então "arquivo idêntico"
+          # aqui significa mesmo "nada a fazer".
           if git diff --quiet -- responses.json; then
             echo "Nada mudou, pulando commit."
-            exit 0
-          fi
-
-          # generatedAt muda a cada execução. Se for a ÚNICA diferença, não
-          # commita — senão o repositório ganharia um commit a cada disparo.
-          if [ "$(git diff -U0 -- responses.json | grep -c '^[+-][^+-]')" = "2" ] \
-             && [ "$(git diff -U0 -- responses.json | grep -c '"generatedAt"')" = "2" ]; then
-            echo "Só o carimbo de tempo mudou, pulando commit."
-            git checkout -- responses.json
             exit 0
           fi
 
