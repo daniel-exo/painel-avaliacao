@@ -30,6 +30,12 @@ header h1{margin:0;font-size:1.3rem;}
 header .meta{font-size:.8rem;color:var(--muted);}
 /* Aviso de dado velho: se a carga automática parar, isso fica visível na
    primeira olhada, em vez de o painel parecer atualizado indefinidamente. */
+/* Explica uma coluna vazia no comparativo: falta de dado, não falha do painel. */
+.aviso-coluna{
+  margin:8px 0 4px;padding:8px 12px;
+  background:#fff8e1;border-left:4px solid #ffab00;
+  border-radius:4px;font-size:.85rem;color:#5d4a00;
+}
 header .meta.stale{
   color:#fff;background:var(--red);
   font-weight:600;border-radius:4px;

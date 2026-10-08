@@ -416,7 +416,10 @@ function filterRowStats(rowStats, avaliador, avaliado){
 function initFilterBar(data, onChange){
   const avaliadorSel = document.getElementById("filterAvaliador");
   const avaliadoSel = document.getElementById("filterAvaliado");
-  if(!avaliadorSel || !avaliadoSel){
+
+  // Cada filtro é opcional: o Comparativo mostra só o de Avaliado, enquanto o
+  // painel e a página de categorias mostram os dois.
+  if(!avaliadorSel && !avaliadoSel){
     onChange("", "");
     return;
   }
@@ -424,9 +427,9 @@ function initFilterBar(data, onChange){
   const respondents = getRespondentNames(data);
   const subjects = getSubjectNames(data);
 
-  avaliadorSel.innerHTML = '<option value="">Todos</option>' +
+  if(avaliadorSel) avaliadorSel.innerHTML = '<option value="">Todos</option>' +
     respondents.map(n => `<option value="${n}">${n}</option>`).join("");
-  avaliadoSel.innerHTML = '<option value="">Todos</option>' +
+  if(avaliadoSel) avaliadoSel.innerHTML = '<option value="">Todos</option>' +
     subjects.map(n => `<option value="${n}">${n}</option>`).join("");
 
   let savedAvaliador = "", savedAvaliado = "";
@@ -437,15 +440,18 @@ function initFilterBar(data, onChange){
   if(!respondents.includes(savedAvaliador)) savedAvaliador = "";
   if(!subjects.includes(savedAvaliado)) savedAvaliado = "";
 
-  avaliadorSel.value = savedAvaliador;
-  avaliadoSel.value = savedAvaliado;
+  if(avaliadorSel) avaliadorSel.value = savedAvaliador;
+  if(avaliadoSel) avaliadoSel.value = savedAvaliado;
 
   function trigger(){
-    const av = avaliadorSel.value;
-    const ad = avaliadoSel.value;
+    const av = avaliadorSel ? avaliadorSel.value : "";
+    const ad = avaliadoSel ? avaliadoSel.value : "";
     try{
-      localStorage.setItem("filter_avaliador", av);
-      localStorage.setItem("filter_avaliado", ad);
+      // Só gravamos o filtro que a página realmente tem. Sem esse cuidado,
+      // abrir o Comparativo (que não tem o filtro de Avaliador) salvaria ""
+      // e limparia a seleção que o usuário tinha deixado no painel.
+      if(avaliadorSel) localStorage.setItem("filter_avaliador", av);
+      if(avaliadoSel) localStorage.setItem("filter_avaliado", ad);
     }catch(e){}
     onChange(av, ad);
   }
@@ -454,10 +460,22 @@ function initFilterBar(data, onChange){
   // a cada recarga automática, e com addEventListener os handlers iam se
   // acumulando — depois de um dia aberto, cada mudança de filtro disparava
   // centenas de renderizações.
-  avaliadorSel.onchange = trigger;
-  avaliadoSel.onchange = trigger;
+  if(avaliadorSel) avaliadorSel.onchange = trigger;
+  if(avaliadoSel) avaliadoSel.onchange = trigger;
 
   trigger();
+}
+
+// Nome de quem faz a avaliação não-própria, lido do dado em vez de fixo no
+// HTML. Hoje o formulário só oferece "Gestor", mas se um dia incluir "Par" ou
+// "Cliente interno" o rótulo deixa de mentir sozinho.
+function peerLabel(rowStats){
+  const tipos = Array.from(new Set(
+    rowStats.filter(s => !s.isSelf && s.evalType).map(s => s.evalType.trim())
+  ));
+  if(tipos.length === 1) return tipos[0];
+  if(tipos.length === 0) return "Gestor";
+  return "Outros avaliadores";
 }
 
 // Compara autoavaliação (isSelf) vs avaliação de colegas dentro de um

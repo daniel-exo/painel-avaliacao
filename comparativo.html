@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comparativo — Avaliação de Colaboradores</title>
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="data.js?v=6"></script>
+<script src="data.js?v=7"></script>
 </head>
 <body>
 
 <header>
   <div>
-    <h1>Comparativo: Autoavaliação vs Colegas</h1>
+    <h1>Comparativo: Autoavaliação vs Gestor</h1>
     <div class="meta" id="lastUpdated">Carregando dados...</div>
     <div class="meta">Desenvolvido pela EXO exclusivamente para a Indorama.</div>
   </div>
@@ -25,11 +25,7 @@
 <div class="filter-bar">
   <div class="filter-bar-inner">
     <div class="filter-field">
-      <label for="filterAvaliador">Avaliador</label>
-      <select id="filterAvaliador"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-field">
-      <label for="filterAvaliado">Avaliado</label>
+      <label for="filterAvaliado">Colaborador avaliado</label>
       <select id="filterAvaliado"><option value="">Todos</option></select>
     </div>
   </div>
@@ -61,7 +57,7 @@ async function loadData(){
 
     if(getSubjectNames(data).length === 0){
       document.getElementById("main").innerHTML =
-        '<div class="empty">Nenhuma resposta com identificação de colaborador foi encontrada ainda.<br>Confira se o formulário inclui as perguntas de nome e "Quem você vai avaliar?".</div>';
+        '<div class="empty">Nenhuma resposta com identificação de colaborador foi encontrada ainda.<br>Confira se o formulário inclui as perguntas de nome e "Avaliador:".</div>';
     } else {
       initFilterBar(data, (av, ad) => {
         const filtered = filterRowStats(data.rowStats, av, ad);
@@ -87,9 +83,23 @@ function renderComparison(data, rowStats, subjectLabel){
   const comp = computeComparison(rowStats, data.categories, data.questionFields);
   const main = document.getElementById("main");
 
+  // Rótulo tirado do conjunto completo, não do filtrado: se o colaborador
+  // escolhido não tiver avaliação do gestor, a coluna continua se chamando
+  // "Gestor" em vez de virar um rótulo genérico só porque está vazia.
+  const PEER = peerLabel(data.rowStats);
+
   if(comp.selfCount === 0 && comp.peerCount === 0){
     main.innerHTML = '<div class="empty">Nenhuma resposta encontrada para esse filtro.</div>';
     return;
+  }
+
+  // Avisos explícitos para os dois casos de coluna vazia — sem isso o leitor vê
+  // uma coluna de traços e não sabe se é falta de dado ou erro do painel.
+  let aviso = "";
+  if(comp.peerCount === 0){
+    aviso = `<div class="aviso-coluna">Não há avaliação do gestor para este colaborador — a coluna "${PEER}" fica em branco.</div>`;
+  } else if(comp.selfCount === 0){
+    aviso = `<div class="aviso-coluna">Este colaborador não preencheu a autoavaliação — a coluna "Autoavaliação" fica em branco.</div>`;
   }
 
   const catHTML = `
@@ -97,12 +107,13 @@ function renderComparison(data, rowStats, subjectLabel){
       <h2>${subjectLabel} — comparação por categoria</h2>
       <div class="comparison-legend">
         <span><span class="legend-dot" style="background:${SELF_COLOR};"></span>Autoavaliação (${comp.selfCount} resposta${comp.selfCount===1?"":"s"})</span>
-        <span><span class="legend-dot" style="background:${PEER_COLOR};"></span>Avaliação dos colegas (${comp.peerCount} resposta${comp.peerCount===1?"":"s"})</span>
+        <span><span class="legend-dot" style="background:${PEER_COLOR};"></span>Avaliação do ${PEER.toLowerCase()} (${comp.peerCount} resposta${comp.peerCount===1?"":"s"})</span>
       </div>
+      ${aviso}
       <div class="chart-wrap"><canvas id="catCompareChart"></canvas></div>
       <table>
         <thead>
-          <tr><th>Categoria</th><th>Autoavaliação</th><th>Colegas</th><th>Diferença</th></tr>
+          <tr><th>Categoria</th><th>Autoavaliação</th><th>${PEER}</th><th>Diferença</th></tr>
         </thead>
         <tbody>
           ${comp.categoryComparison.map(c => `
@@ -128,7 +139,7 @@ function renderComparison(data, rowStats, subjectLabel){
       <div class="chart-wrap" style="height:${chartHeight}px;"><canvas id="qCompareChart-${ci}"></canvas></div>
       <table>
         <thead>
-          <tr><th>Pergunta</th><th>Autoavaliação</th><th>Colegas</th><th>Diferença</th></tr>
+          <tr><th>Pergunta</th><th>Autoavaliação</th><th>${PEER}</th><th>Diferença</th></tr>
         </thead>
         <tbody>
           ${qs.map(q => `
@@ -155,7 +166,7 @@ function renderComparison(data, rowStats, subjectLabel){
       labels: comp.categoryComparison.map(c => c.category),
       datasets: [
         { label:"Autoavaliação", data: comp.categoryComparison.map(c => c.self), backgroundColor: SELF_COLOR },
-        { label:"Colegas", data: comp.categoryComparison.map(c => c.peer), backgroundColor: PEER_COLOR }
+        { label:PEER, data: comp.categoryComparison.map(c => c.peer), backgroundColor: PEER_COLOR }
       ]
     },
     options: {
@@ -177,7 +188,7 @@ function renderComparison(data, rowStats, subjectLabel){
         labels: qs.map(q => wrapLabel(q.question)),
         datasets: [
           { label:"Autoavaliação", data: qs.map(q => q.self), backgroundColor: SELF_COLOR },
-          { label:"Colegas", data: qs.map(q => q.peer), backgroundColor: PEER_COLOR }
+          { label:PEER, data: qs.map(q => q.peer), backgroundColor: PEER_COLOR }
         ]
       },
       options: {
